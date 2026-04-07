@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Input;
@@ -8,30 +9,73 @@ namespace claude_voice;
 public partial class MainWindow : Window
 {
     private readonly ClaudeService _claude;
+    private readonly SttService?   _stt;
     private CancellationTokenSource? _streamCts;
 
     public MainWindow()
     {
         var config = AppConfig.Load();
         _claude = new ClaudeService(config.AnthropicApiKey);
+
+        // Resolve whisper model path relative to exe, then working directory
+        var modelPath = ResolveModelPath(config.WhisperModel);
+        try
+        {
+            _stt = new SttService(modelPath);
+        }
+        catch (FileNotFoundException ex)
+        {
+            // App still works for typed input; PTT will be disabled
+            MessageBox.Show(ex.Message, "Whisper model not found",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+
         InitializeComponent();
+
+        if (_stt is null)
+        {
+            PttButton.IsEnabled  = false;
+            PttButton.ToolTip    = "Run download-whisper.ps1 to enable PTT";
+            StatusText.Text      = "PTT unavailable — model missing";
+        }
     }
 
     // -------------------------------------------------------------------------
     // PTT
 
-    private void PttButton_MouseDown(object sender, MouseButtonEventArgs e)
+    private async void PttButton_MouseDown(object sender, MouseButtonEventArgs e)
     {
-        PttButton.Background = new SolidColorBrush(Color.FromRgb(0x8B, 0x00, 0x00));
+        if (_stt is null) return;
+        PttButton.Background = new SolidColorBrush(Color.FromRgb(0xC0, 0x20, 0x20));
+        StatusText.Foreground = new SolidColorBrush(Color.FromRgb(0xDC, 0xDC, 0xAA));
         StatusText.Text = "Recording...";
-        // TODO: start STT recording
+        _stt.StartRecording();
+        await Task.CompletedTask;
     }
 
-    private void PttButton_MouseUp(object sender, MouseButtonEventArgs e)
+    private async void PttButton_MouseUp(object sender, MouseButtonEventArgs e)
     {
+        if (_stt is null || !_stt.IsRecording) return;
+
         PttButton.Background = new SolidColorBrush(Color.FromRgb(0x3C, 0x3C, 0x3C));
-        StatusText.Text = "Ready";
-        // TODO: stop recording, transcribe, populate UserInputText
+        StatusText.Text = "Transcribing...";
+
+        try
+        {
+            var text = await _stt.StopAndTranscribeAsync();
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                UserInputText.Text   = text;
+                UserInputText.CaretIndex = text.Length;
+            }
+            StatusText.Foreground = new SolidColorBrush(Color.FromRgb(0x6A, 0x99, 0x55));
+            StatusText.Text = "Ready";
+        }
+        catch (Exception ex)
+        {
+            StatusText.Foreground = new SolidColorBrush(Colors.OrangeRed);
+            StatusText.Text = $"STT error: {ex.Message}";
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -72,7 +116,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             ClaudeResponseText.Text = $"Error: {ex.Message}";
-            StatusText.Foreground = new SolidColorBrush(Colors.OrangeRed);
+            StatusText.Foreground   = new SolidColorBrush(Colors.OrangeRed);
             StatusText.Text = "Error";
         }
         finally
@@ -88,11 +132,25 @@ public partial class MainWindow : Window
 
     private void SetBusy(bool busy)
     {
-        SendButton.IsEnabled = !busy;
-        PttButton.IsEnabled  = !busy;
+        SendButton.IsEnabled  = !busy;
+        PttButton.IsEnabled   = !busy && _stt is not null;
         StatusText.Foreground = busy
             ? new SolidColorBrush(Color.FromRgb(0xDC, 0xDC, 0xAA))
             : new SolidColorBrush(Color.FromRgb(0x6A, 0x99, 0x55));
         StatusText.Text = busy ? "Waiting for Claude..." : "Ready";
+    }
+
+    private static string ResolveModelPath(string configured)
+    {
+        if (Path.IsPathRooted(configured) && File.Exists(configured))
+            return configured;
+
+        var candidates = new[]
+        {
+            Path.Combine(AppContext.BaseDirectory,    configured),
+            Path.Combine(Directory.GetCurrentDirectory(), configured),
+        };
+
+        return candidates.FirstOrDefault(File.Exists) ?? configured;
     }
 }

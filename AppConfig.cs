@@ -6,6 +6,7 @@ namespace claude_voice;
 public sealed class AppConfig
 {
     public string AnthropicApiKey { get; init; } = "";
+    public string WhisperModel    { get; init; } = "whisper\\ggml-base.en.bin";
 
     public static AppConfig Load()
     {

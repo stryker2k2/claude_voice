@@ -1,3 +1,4 @@
 {
-  "anthropicApiKey": "your_api_key_here"
+  "anthropicApiKey": "your_api_key_here",
+  "whisperModel": "whisper\\ggml-base.en.bin"
 }
