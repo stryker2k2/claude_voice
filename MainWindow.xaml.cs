@@ -19,7 +19,6 @@ public partial class MainWindow : Window
         _claude = new ClaudeService(config.AnthropicApiKey);
         _tts    = new TtsEngine(config);
 
-        // Resolve whisper model path relative to exe, then working directory
         var modelPath = ResolveModelPath(config.WhisperModel);
         try
         {
@@ -27,7 +26,6 @@ public partial class MainWindow : Window
         }
         catch (FileNotFoundException ex)
         {
-            // App still works for typed input; PTT will be disabled
             MessageBox.Show(ex.Message, "Whisper model not found",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
         }
@@ -36,23 +34,22 @@ public partial class MainWindow : Window
 
         if (_stt is null)
         {
-            PttButton.IsEnabled  = false;
-            PttButton.ToolTip    = "Run download-whisper.ps1 to enable PTT";
-            StatusText.Text      = "PTT unavailable — model missing";
+            PttButton.IsEnabled = false;
+            PttButton.ToolTip   = "Run download-whisper.ps1 to enable PTT";
+            StatusText.Text     = "PTT unavailable — model missing";
         }
     }
 
     // -------------------------------------------------------------------------
     // PTT
 
-    private async void PttButton_MouseDown(object sender, MouseButtonEventArgs e)
+    private void PttButton_MouseDown(object sender, MouseButtonEventArgs e)
     {
         if (_stt is null) return;
-        PttButton.Background = new SolidColorBrush(Color.FromRgb(0xC0, 0x20, 0x20));
+        PttButton.Background  = new SolidColorBrush(Color.FromRgb(0xC0, 0x20, 0x20));
         StatusText.Foreground = new SolidColorBrush(Color.FromRgb(0xDC, 0xDC, 0xAA));
-        StatusText.Text = "Recording...";
+        StatusText.Text       = "Recording...";
         _stt.StartRecording();
-        await Task.CompletedTask;
     }
 
     private async void PttButton_MouseUp(object sender, MouseButtonEventArgs e)
@@ -60,23 +57,23 @@ public partial class MainWindow : Window
         if (_stt is null || !_stt.IsRecording) return;
 
         PttButton.Background = new SolidColorBrush(Color.FromRgb(0x3C, 0x3C, 0x3C));
-        StatusText.Text = "Transcribing...";
+        StatusText.Text      = "Transcribing...";
 
         try
         {
             var text = await _stt.StopAndTranscribeAsync();
             if (!string.IsNullOrWhiteSpace(text))
+                await SendMessageAsync(text);
+            else
             {
-                UserInputText.Text   = text;
-                UserInputText.CaretIndex = text.Length;
+                StatusText.Foreground = new SolidColorBrush(Color.FromRgb(0x6A, 0x99, 0x55));
+                StatusText.Text       = "Ready";
             }
-            StatusText.Foreground = new SolidColorBrush(Color.FromRgb(0x6A, 0x99, 0x55));
-            StatusText.Text = "Ready";
         }
         catch (Exception ex)
         {
             StatusText.Foreground = new SolidColorBrush(Colors.OrangeRed);
-            StatusText.Text = $"STT error: {ex.Message}";
+            StatusText.Text       = $"STT error: {ex.Message}";
         }
     }
 
@@ -85,10 +82,14 @@ public partial class MainWindow : Window
 
     private async void SendButton_Click(object sender, RoutedEventArgs e)
     {
-        var userText = UserInputText.Text.Trim();
-        if (string.IsNullOrEmpty(userText)) return;
+        var text = UserInputText.Text.Trim();
+        if (!string.IsNullOrEmpty(text))
+            await SendMessageAsync(text);
+    }
 
-        UserInputText.Clear();
+    private async Task SendMessageAsync(string userText)
+    {
+        UserInputText.Text = userText;  // show what was sent
         SetBusy(true);
 
         _streamCts = new CancellationTokenSource();
@@ -109,7 +110,8 @@ public partial class MainWindow : Window
                 },
                 _streamCts.Token);
 
-            // Speak the completed response on a background thread so the UI stays responsive
+            UserInputText.Clear();
+
             var responseText = sb.ToString();
             _ = Task.Run(() => _tts.SpeakAsync(responseText), CancellationToken.None);
 
@@ -123,7 +125,7 @@ public partial class MainWindow : Window
         {
             ClaudeResponseText.Text = $"Error: {ex.Message}";
             StatusText.Foreground   = new SolidColorBrush(Colors.OrangeRed);
-            StatusText.Text = "Error";
+            StatusText.Text         = "Error";
         }
         finally
         {
@@ -153,7 +155,7 @@ public partial class MainWindow : Window
 
         var candidates = new[]
         {
-            Path.Combine(AppContext.BaseDirectory,    configured),
+            Path.Combine(AppContext.BaseDirectory,        configured),
             Path.Combine(Directory.GetCurrentDirectory(), configured),
         };
 
