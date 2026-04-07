@@ -12,6 +12,8 @@ public partial class MainWindow : Window
     private readonly ClaudeService _claude;
     private readonly SttService?   _stt;
     private readonly TtsEngine     _tts;
+    private readonly Key           _pttKey;
+    private bool                   _pttKeyDown;
     private CancellationTokenSource? _streamCts;
 
     public ObservableCollection<ChatMessage> Messages { get; } = [];
@@ -21,6 +23,7 @@ public partial class MainWindow : Window
         var config = AppConfig.Load();
         _claude = new ClaudeService(config.AnthropicApiKey);
         _tts    = new TtsEngine(config);
+        _pttKey = Enum.TryParse<Key>(config.PttKey, ignoreCase: true, out var k) ? k : Key.F5;
 
         var modelPath = ResolveModelPath(config.WhisperModel);
         try
@@ -144,6 +147,25 @@ public partial class MainWindow : Window
             _streamCts.Dispose();
             _streamCts = null;
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Keyboard PTT
+
+    private void Window_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != _pttKey || _pttKeyDown || _stt is null || !SendButton.IsEnabled) return;
+        _pttKeyDown = true;
+        e.Handled   = true;
+        PttButton_MouseDown(sender, null!);
+    }
+
+    private async void Window_KeyUp(object sender, KeyEventArgs e)
+    {
+        if (e.Key != _pttKey || !_pttKeyDown) return;
+        _pttKeyDown = false;
+        e.Handled   = true;
+        await Task.Run(() => Dispatcher.Invoke(() => PttButton_MouseUp(sender, null!)));
     }
 
     // -------------------------------------------------------------------------

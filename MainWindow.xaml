@@ -6,7 +6,9 @@
         mc:Ignorable="d"
         Title="Claude Voice" Height="600" Width="900"
         MinHeight="400" MinWidth="600"
-        Background="#1E1E1E">
+        Background="#1E1E1E"
+        KeyDown="Window_KeyDown"
+        KeyUp="Window_KeyUp">
 
     <Window.Resources>
         <!-- Scrollbar style: thin, dark -->

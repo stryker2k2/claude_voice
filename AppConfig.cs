@@ -14,6 +14,9 @@ public sealed class AppConfig
     public double  TtsRate    { get; init; } = 0;
     public int     TtsVolume  { get; init; } = 100;
 
+    // PTT keyboard shortcut — any System.Windows.Input.Key name, e.g. "F5", "LeftCtrl"
+    public string PttKey { get; init; } = "F5";
+
     public static AppConfig Load()
     {
         // Look next to the exe first, then fall back to the working directory (dotnet run)

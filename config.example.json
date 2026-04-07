@@ -4,5 +4,6 @@
   "piperExe": "piper\\piper.exe",
   "piperModel": "piper\\en_US-ryan-high.onnx",
   "ttsRate": 0.2,
-  "ttsVolume": 100
+  "ttsVolume": 100,
+  "pttKey": "F5"
 }
