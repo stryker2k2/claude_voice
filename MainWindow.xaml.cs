@@ -1,10 +1,15 @@
+using System.Text;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media;
 
 namespace claude_voice;
 
 public partial class MainWindow : Window
 {
+    private readonly ClaudeService _claude = new();
+    private CancellationTokenSource? _streamCts;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -15,15 +20,14 @@ public partial class MainWindow : Window
 
     private void PttButton_MouseDown(object sender, MouseButtonEventArgs e)
     {
-        PttButton.Background = System.Windows.Media.Brushes.DarkRed;
+        PttButton.Background = new SolidColorBrush(Color.FromRgb(0x8B, 0x00, 0x00));
         StatusText.Text = "Recording...";
         // TODO: start STT recording
     }
 
     private void PttButton_MouseUp(object sender, MouseButtonEventArgs e)
     {
-        PttButton.Background = new System.Windows.Media.SolidColorBrush(
-            System.Windows.Media.Color.FromRgb(0x3C, 0x3C, 0x3C));
+        PttButton.Background = new SolidColorBrush(Color.FromRgb(0x3C, 0x3C, 0x3C));
         StatusText.Text = "Ready";
         // TODO: stop recording, transcribe, populate UserInputText
     }
@@ -31,14 +35,62 @@ public partial class MainWindow : Window
     // -------------------------------------------------------------------------
     // Send
 
-    private void SendButton_Click(object sender, RoutedEventArgs e)
+    private async void SendButton_Click(object sender, RoutedEventArgs e)
     {
-        var text = UserInputText.Text.Trim();
-        if (string.IsNullOrEmpty(text)) return;
+        var userText = UserInputText.Text.Trim();
+        if (string.IsNullOrEmpty(userText)) return;
 
-        // TODO: send text to Claude API, stream response into ClaudeResponseText
-        ClaudeResponseText.Text = $"[Sending: {text}]";
         UserInputText.Clear();
-        StatusText.Text = "Waiting for Claude...";
+        SetBusy(true);
+
+        _streamCts = new CancellationTokenSource();
+        var sb = new StringBuilder();
+
+        try
+        {
+            await _claude.StreamResponseAsync(
+                userText,
+                token =>
+                {
+                    sb.Append(token);
+                    Dispatcher.Invoke(() =>
+                    {
+                        ClaudeResponseText.Text = sb.ToString();
+                        ClaudeScrollViewer.ScrollToEnd();
+                    });
+                },
+                _streamCts.Token);
+
+            StatusText.Text = "Ready";
+        }
+        catch (OperationCanceledException)
+        {
+            StatusText.Text = "Cancelled";
+        }
+        catch (Exception ex)
+        {
+            ClaudeResponseText.Text = $"Error: {ex.Message}";
+            StatusText.Foreground = new SolidColorBrush(Colors.OrangeRed);
+            StatusText.Text = "Error";
+        }
+        finally
+        {
+            SetBusy(false);
+            _streamCts.Dispose();
+            _streamCts = null;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Helpers
+
+    private void SetBusy(bool busy)
+    {
+        SendButton.IsEnabled = !busy;
+        PttButton.IsEnabled  = !busy;
+        StatusText.Foreground = busy
+            ? new SolidColorBrush(Color.FromRgb(0xDC, 0xDC, 0xAA))
+            : new SolidColorBrush(Color.FromRgb(0x6A, 0x99, 0x55));
+        StatusText.Text = busy ? "Waiting for Claude..." : "Ready";
     }
 }
