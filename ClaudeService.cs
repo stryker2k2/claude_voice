@@ -9,9 +9,9 @@ public sealed class ClaudeService
     private readonly AnthropicClient _client;
     private readonly List<MessageParam> _history = [];
 
-    public ClaudeService()
+    public ClaudeService(string apiKey)
     {
-        _client = new AnthropicClient();
+        _client = new AnthropicClient() { ApiKey = apiKey };
     }
 
     public async Task StreamResponseAsync(

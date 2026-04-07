@@ -7,11 +7,13 @@ namespace claude_voice;
 
 public partial class MainWindow : Window
 {
-    private readonly ClaudeService _claude = new();
+    private readonly ClaudeService _claude;
     private CancellationTokenSource? _streamCts;
 
     public MainWindow()
     {
+        var config = AppConfig.Load();
+        _claude = new ClaudeService(config.AnthropicApiKey);
         InitializeComponent();
     }
 
