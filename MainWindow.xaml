@@ -27,38 +27,51 @@
         </Grid.RowDefinitions>
 
         <!-- ═══════════════════════════════════════════════════════
-             TOP PANEL — Claude responses
+             TOP PANEL — Conversation log
              ═══════════════════════════════════════════════════════ -->
-        <Border Grid.Row="0" Background="#252526" Margin="8,8,8,0" CornerRadius="6">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
-
-                <!-- Header -->
-                <TextBlock Grid.Row="0"
-                           Text="Claude"
-                           Foreground="#9CDCFE"
-                           FontFamily="Segoe UI"
-                           FontSize="12"
-                           FontWeight="SemiBold"
-                           Margin="12,8,12,4"/>
-
-                <!-- Response text -->
-                <ScrollViewer Grid.Row="1"
-                              x:Name="ClaudeScrollViewer"
-                              VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled"
-                              Padding="12,0,12,12">
-                    <TextBlock x:Name="ClaudeResponseText"
-                               Foreground="#D4D4D4"
-                               FontFamily="Segoe UI"
-                               FontSize="14"
-                               TextWrapping="Wrap"
-                               Text="Waiting for response..."/>
-                </ScrollViewer>
-            </Grid>
+        <Border Grid.Row="0" Background="#1E1E1E" Margin="8,8,8,0" CornerRadius="6">
+            <ScrollViewer x:Name="ClaudeScrollViewer"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled"
+                          Padding="8,8,8,8">
+                <ItemsControl x:Name="MessageList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="4,3">
+                                <!-- User message: right-aligned blue bubble -->
+                                <!-- Claude message: left-aligned dark bubble -->
+                                <Border CornerRadius="8" Padding="10,7" MaxWidth="680">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Background"          Value="#252526"/>
+                                            <Setter Property="HorizontalAlignment" Value="Left"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsUser}" Value="True">
+                                                    <Setter Property="Background"          Value="#0E4C78"/>
+                                                    <Setter Property="HorizontalAlignment" Value="Right"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding DisplayName}"
+                                                   FontFamily="Segoe UI"
+                                                   FontSize="11"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="#9CDCFE"
+                                                   Margin="0,0,0,3"/>
+                                        <TextBlock Text="{Binding Text}"
+                                                   FontFamily="Segoe UI"
+                                                   FontSize="14"
+                                                   Foreground="#D4D4D4"
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
         </Border>
 
         <!-- ═══════════════════════════════════════════════════════

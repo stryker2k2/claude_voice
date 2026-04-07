@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Text;
 using System.Windows;
@@ -12,6 +13,8 @@ public partial class MainWindow : Window
     private readonly SttService?   _stt;
     private readonly TtsEngine     _tts;
     private CancellationTokenSource? _streamCts;
+
+    public ObservableCollection<ChatMessage> Messages { get; } = [];
 
     public MainWindow()
     {
@@ -31,6 +34,8 @@ public partial class MainWindow : Window
         }
 
         InitializeComponent();
+
+        MessageList.ItemsSource = Messages;
 
         if (_stt is null)
         {
@@ -89,8 +94,16 @@ public partial class MainWindow : Window
 
     private async Task SendMessageAsync(string userText)
     {
-        UserInputText.Text = userText;  // show what was sent
+        UserInputText.Clear();
         SetBusy(true);
+
+        // Add user bubble
+        Messages.Add(new ChatMessage { Role = "user", Text = userText });
+
+        // Add empty assistant bubble — tokens will stream into it
+        var assistantMsg = new ChatMessage { Role = "assistant" };
+        Messages.Add(assistantMsg);
+        ClaudeScrollViewer.ScrollToEnd();
 
         _streamCts = new CancellationTokenSource();
         var sb = new StringBuilder();
@@ -104,13 +117,11 @@ public partial class MainWindow : Window
                     sb.Append(token);
                     Dispatcher.Invoke(() =>
                     {
-                        ClaudeResponseText.Text = sb.ToString();
+                        assistantMsg.Text = sb.ToString();
                         ClaudeScrollViewer.ScrollToEnd();
                     });
                 },
                 _streamCts.Token);
-
-            UserInputText.Clear();
 
             var responseText = sb.ToString();
             _ = Task.Run(() => _tts.SpeakAsync(responseText), CancellationToken.None);
@@ -123,9 +134,9 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            ClaudeResponseText.Text = $"Error: {ex.Message}";
-            StatusText.Foreground   = new SolidColorBrush(Colors.OrangeRed);
-            StatusText.Text         = "Error";
+            assistantMsg.Text           = $"Error: {ex.Message}";
+            StatusText.Foreground       = new SolidColorBrush(Colors.OrangeRed);
+            StatusText.Text             = "Error";
         }
         finally
         {
