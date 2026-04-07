@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace claude_voice;
 
@@ -17,12 +18,22 @@ public sealed class AppConfig
     // PTT keyboard shortcut — any System.Windows.Input.Key name, e.g. "F5", "LeftCtrl"
     public string PttKey { get; init; } = "F5";
 
+    // Claude system prompt
+    public string SystemPrompt { get; init; } =
+        "You are a helpful voice assistant. Keep responses conversational and concise — they will be spoken aloud.";
+
+    // -------------------------------------------------------------------------
+
+    private static readonly JsonSerializerOptions _readOptions  = new() { PropertyNameCaseInsensitive = true };
+    private static readonly JsonSerializerOptions _writeOptions = new() { WriteIndented = true };
+
+    private static string? _loadedPath;
+
     public static AppConfig Load()
     {
-        // Look next to the exe first, then fall back to the working directory (dotnet run)
         var locations = new[]
         {
-            Path.Combine(AppContext.BaseDirectory, "config.json"),
+            Path.Combine(AppContext.BaseDirectory,        "config.json"),
             Path.Combine(Directory.GetCurrentDirectory(), "config.json"),
         };
 
@@ -31,13 +42,38 @@ public sealed class AppConfig
             if (!File.Exists(path)) continue;
 
             var json = File.ReadAllText(path);
-            var cfg  = JsonSerializer.Deserialize<AppConfig>(json,
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-            if (cfg is not null) return cfg;
+            var cfg  = JsonSerializer.Deserialize<AppConfig>(json, _readOptions);
+            if (cfg is not null)
+            {
+                _loadedPath = path;
+                return cfg;
+            }
         }
 
         throw new FileNotFoundException(
             "config.json not found. Copy config.example.json to config.json and fill in your API key.");
+    }
+
+    /// <summary>
+    /// Saves a new config over the file that was originally loaded.
+    /// Only the system prompt is mutable at runtime; all other fields are preserved.
+    /// </summary>
+    public static void SaveSystemPrompt(AppConfig current, string newPrompt)
+    {
+        if (_loadedPath is null) return;
+
+        var updated = new AppConfig
+        {
+            AnthropicApiKey = current.AnthropicApiKey,
+            WhisperModel    = current.WhisperModel,
+            PiperExe        = current.PiperExe,
+            PiperModel      = current.PiperModel,
+            TtsRate         = current.TtsRate,
+            TtsVolume       = current.TtsVolume,
+            PttKey          = current.PttKey,
+            SystemPrompt    = newPrompt,
+        };
+
+        File.WriteAllText(_loadedPath, JsonSerializer.Serialize(updated, _writeOptions));
     }
 }

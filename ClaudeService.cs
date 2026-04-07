@@ -9,9 +9,12 @@ public sealed class ClaudeService
     private readonly AnthropicClient _client;
     private readonly List<MessageParam> _history = [];
 
-    public ClaudeService(string apiKey)
+    public string SystemPrompt { get; set; }
+
+    public ClaudeService(string apiKey, string systemPrompt)
     {
-        _client = new AnthropicClient() { ApiKey = apiKey };
+        _client       = new AnthropicClient() { ApiKey = apiKey };
+        SystemPrompt  = systemPrompt;
     }
 
     public async Task StreamResponseAsync(
@@ -25,7 +28,7 @@ public sealed class ClaudeService
         {
             Model = Model.ClaudeOpus4_6,
             MaxTokens = 64000,
-            System = "You are a helpful voice assistant. Keep responses conversational and concise — they will be spoken aloud.",
+            System = SystemPrompt,
             Messages = [.. _history],
         };
 

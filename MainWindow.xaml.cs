@@ -13,6 +13,7 @@ public partial class MainWindow : Window
     private readonly SttService?   _stt;
     private readonly TtsEngine     _tts;
     private readonly Key           _pttKey;
+    private          AppConfig     _config;
     private bool                   _pttKeyDown;
     private CancellationTokenSource? _streamCts;
 
@@ -20,12 +21,12 @@ public partial class MainWindow : Window
 
     public MainWindow()
     {
-        var config = AppConfig.Load();
-        _claude = new ClaudeService(config.AnthropicApiKey);
-        _tts    = new TtsEngine(config);
-        _pttKey = Enum.TryParse<Key>(config.PttKey, ignoreCase: true, out var k) ? k : Key.F5;
+        _config = AppConfig.Load();
+        _claude = new ClaudeService(_config.AnthropicApiKey, _config.SystemPrompt);
+        _tts    = new TtsEngine(_config);
+        _pttKey = Enum.TryParse<Key>(_config.PttKey, ignoreCase: true, out var k) ? k : Key.F5;
 
-        var modelPath = ResolveModelPath(config.WhisperModel);
+        var modelPath = ResolveModelPath(_config.WhisperModel);
         try
         {
             _stt = new SttService(modelPath);
@@ -147,6 +148,18 @@ public partial class MainWindow : Window
             _streamCts.Dispose();
             _streamCts = null;
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Settings
+
+    private void SettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new SettingsWindow(_claude.SystemPrompt) { Owner = this };
+        if (dlg.ShowDialog() != true) return;
+
+        _claude.SystemPrompt = dlg.SystemPrompt;
+        AppConfig.SaveSystemPrompt(_config, dlg.SystemPrompt);
     }
 
     // -------------------------------------------------------------------------

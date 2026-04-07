@@ -128,6 +128,7 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
                     <!-- Status label -->
@@ -139,9 +140,24 @@
                                FontSize="12"
                                VerticalAlignment="Center"/>
 
+                    <!-- Settings button -->
+                    <Button x:Name="SettingsButton"
+                            Grid.Column="1"
+                            Content="⚙"
+                            Width="34" Height="34"
+                            Margin="0,0,8,0"
+                            Background="#3C3C3C"
+                            Foreground="#D4D4D4"
+                            BorderBrush="#555555"
+                            BorderThickness="1"
+                            FontSize="16"
+                            Cursor="Hand"
+                            ToolTip="Settings"
+                            Click="SettingsButton_Click"/>
+
                     <!-- PTT button -->
                     <Button x:Name="PttButton"
-                            Grid.Column="1"
+                            Grid.Column="2"
                             Content="🎤  Hold to Talk"
                             Width="140" Height="34"
                             Margin="0,0,8,0"
@@ -157,7 +173,7 @@
 
                     <!-- Send button -->
                     <Button x:Name="SendButton"
-                            Grid.Column="2"
+                            Grid.Column="3"
                             Content="Send"
                             Width="80" Height="34"
                             Background="#0E639C"
