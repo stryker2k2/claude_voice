@@ -1,4 +1,8 @@
 {
   "anthropicApiKey": "your_api_key_here",
-  "whisperModel": "whisper\\ggml-base.en.bin"
+  "whisperModel": "whisper\\ggml-base.en.bin",
+  "piperExe": "piper\\piper.exe",
+  "piperModel": "piper\\en_US-ryan-high.onnx",
+  "ttsRate": 0.2,
+  "ttsVolume": 100
 }

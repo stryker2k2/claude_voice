@@ -10,12 +10,14 @@ public partial class MainWindow : Window
 {
     private readonly ClaudeService _claude;
     private readonly SttService?   _stt;
+    private readonly TtsEngine     _tts;
     private CancellationTokenSource? _streamCts;
 
     public MainWindow()
     {
         var config = AppConfig.Load();
         _claude = new ClaudeService(config.AnthropicApiKey);
+        _tts    = new TtsEngine(config);
 
         // Resolve whisper model path relative to exe, then working directory
         var modelPath = ResolveModelPath(config.WhisperModel);
@@ -106,6 +108,10 @@ public partial class MainWindow : Window
                     });
                 },
                 _streamCts.Token);
+
+            // Speak the completed response on a background thread so the UI stays responsive
+            var responseText = sb.ToString();
+            _ = Task.Run(() => _tts.SpeakAsync(responseText), CancellationToken.None);
 
             StatusText.Text = "Ready";
         }

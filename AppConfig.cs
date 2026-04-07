@@ -8,6 +8,12 @@ public sealed class AppConfig
     public string AnthropicApiKey { get; init; } = "";
     public string WhisperModel    { get; init; } = "whisper\\ggml-base.en.bin";
 
+    // TTS settings (mirrors claude_tts config.json)
+    public string? PiperExe   { get; init; }
+    public string? PiperModel { get; init; }
+    public double  TtsRate    { get; init; } = 0;
+    public int     TtsVolume  { get; init; } = 100;
+
     public static AppConfig Load()
     {
         // Look next to the exe first, then fall back to the working directory (dotnet run)
