@@ -4,6 +4,8 @@ A Windows WPF desktop app for voice and text conversations with Claude AI.
 Uses **Piper TTS** (local neural voice) for spoken responses and **Whisper** (local STT)
 for push-to-talk input.
 
+![Claude Voice screenshot](Docs/screenshot_001.png)
+
 ---
 
 ## Quick Start (new developer)
