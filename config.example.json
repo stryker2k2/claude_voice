@@ -5,5 +5,6 @@
   "piperModel": "piper\\en_US-ryan-high.onnx",
   "ttsRate": 0.2,
   "ttsVolume": 100,
-  "pttKey": "F5"
+  "pttKey": "F5",
+  "wakeWord": "hey claude"
 }

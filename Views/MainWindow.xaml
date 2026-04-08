@@ -100,6 +100,7 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
                     <!-- Status -->
@@ -118,8 +119,30 @@
                             Cursor="Hand" ToolTip="Settings"
                             Click="SettingsButton_Click"/>
 
+                    <!-- Wake word toggle -->
+                    <Button Grid.Column="2"
+                            Content="&#xE720;" Width="34" Height="34" Margin="0,0,8,0"
+                            Foreground="#D4D4D4" BorderBrush="#555555" BorderThickness="1"
+                            FontFamily="Segoe MDL2 Assets" FontSize="16"
+                            Cursor="Hand"
+                            IsEnabled="{Binding IsWakeWordEnabled}"
+                            ToolTip="{Binding WakeWordTooltip}"
+                            Command="{Binding ToggleWakeWordCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                <Setter Property="Background" Value="#3C3C3C"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsWakeWordActive}" Value="True">
+                                        <Setter Property="Background" Value="#1A6B2A"/>
+                                        <Setter Property="BorderBrush" Value="#2ECC71"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+
                     <!-- PTT -->
-                    <Button Grid.Column="2" x:Name="PttButton"
+                    <Button Grid.Column="3" x:Name="PttButton"
                             Content="&#x1F3A4;  Hold to Talk"
                             Width="140" Height="34" Margin="0,0,8,0"
                             Foreground="#D4D4D4" BorderBrush="#555555" BorderThickness="1"
@@ -141,7 +164,7 @@
                     </Button>
 
                     <!-- Send -->
-                    <Button Grid.Column="3"
+                    <Button Grid.Column="4"
                             Content="Send" Width="80" Height="34"
                             Background="#0E639C" Foreground="White"
                             BorderThickness="0" FontFamily="Segoe UI"

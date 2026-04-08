@@ -16,6 +16,7 @@
   <ItemGroup>
     <PackageReference Include="Anthropic" Version="12.11.0" />
     <PackageReference Include="NAudio" Version="2.3.0" />
+    <PackageReference Include="System.Speech" Version="*" />
     <PackageReference Include="Whisper.net" Version="1.9.0" />
     <PackageReference Include="Whisper.net.Runtime" Version="1.9.0" />
   </ItemGroup>

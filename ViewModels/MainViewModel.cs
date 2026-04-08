@@ -15,6 +15,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private          AppConfig     _config;
     private          CancellationTokenSource? _streamCts;
     private          string?       _initWarning;
+    private          WakeWordService? _wakeWord;
 
     // -------------------------------------------------------------------------
     // Bindable state
@@ -24,19 +25,25 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private bool   _isPttProcessing;
     private bool   _isBusy;
     private bool   _isRecording;
+    private bool   _isWakeWordActive;
     private string _userInputText = "";
 
     public ObservableCollection<ChatMessage> Messages { get; } = [];
 
-    public string StatusText   { get => _statusText;   private set => SetField(ref _statusText, value); }
-    public Brush  StatusBrush  { get => _statusBrush;  private set => SetField(ref _statusBrush, value); }
-    public bool   IsBusy          { get => _isBusy;          private set { SetField(ref _isBusy, value);          RaiseCanExecute(); } }
-    public bool   IsRecording     { get => _isRecording;     private set { SetField(ref _isRecording, value);     RaiseCanExecute(); } }
-    public bool   IsPttProcessing { get => _isPttProcessing; private set { SetField(ref _isPttProcessing, value); RaiseCanExecute(); } }
-    public bool   CanPtt          => !_isBusy && !_isPttProcessing && _stt is not null;
-    public bool   CanUsePtt       => _stt is not null && !_isBusy && !_isPttProcessing;
-    public bool   IsPttEnabled => _stt is not null;
-    public string PttTooltip   => IsPttEnabled ? "Hold to Talk" : "Run download-whisper.ps1 to enable PTT";
+    public string StatusText        { get => _statusText;        private set => SetField(ref _statusText, value); }
+    public Brush  StatusBrush       { get => _statusBrush;       private set => SetField(ref _statusBrush, value); }
+    public bool   IsBusy            { get => _isBusy;            private set { SetField(ref _isBusy, value);            RaiseCanExecute(); } }
+    public bool   IsRecording       { get => _isRecording;       private set { SetField(ref _isRecording, value);       RaiseCanExecute(); } }
+    public bool   IsPttProcessing   { get => _isPttProcessing;   private set { SetField(ref _isPttProcessing, value);   RaiseCanExecute(); } }
+    public bool   IsWakeWordActive  { get => _isWakeWordActive;  private set { SetField(ref _isWakeWordActive, value);  RaiseCanExecute(); } }
+    public bool   CanPtt            => !_isBusy && !_isPttProcessing && _stt is not null;
+    public bool   CanUsePtt         => _stt is not null && !_isBusy && !_isPttProcessing;
+    public bool   IsPttEnabled      => _stt is not null;
+    public bool   IsWakeWordEnabled => _stt is not null;
+    public string PttTooltip        => IsPttEnabled ? "Hold to Talk" : "Run download-whisper.ps1 to enable PTT";
+    public string WakeWordTooltip   => IsWakeWordEnabled
+        ? $"Toggle always-on listening (wake word: \"{_config.WakeWord}\")"
+        : "Run download-whisper.ps1 to enable wake word";
 
     public string UserInputText
     {
@@ -52,9 +59,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     // -------------------------------------------------------------------------
     // Commands
 
-    public ICommand          SendCommand     { get; }
-    public ICommand          StartPttCommand { get; }
-    public AsyncRelayCommand StopPttCommand  { get; }
+    public ICommand          SendCommand            { get; }
+    public ICommand          StartPttCommand        { get; }
+    public AsyncRelayCommand StopPttCommand         { get; }
+    public ICommand          ToggleWakeWordCommand  { get; }
 
     // -------------------------------------------------------------------------
     // Events raised for the View
@@ -80,9 +88,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         try { _stt = new SttService(ResolveModelPath(_config.WhisperModel)); }
         catch (FileNotFoundException ex) { _initWarning = ex.Message; }
 
-        SendCommand     = new AsyncRelayCommand(SendAsync,   () => !IsBusy);
-        StartPttCommand = new RelayCommand(StartPtt,         () => CanPtt);
-        StopPttCommand  = new AsyncRelayCommand(StopPttAsync);
+        SendCommand           = new AsyncRelayCommand(SendAsync,    () => !IsBusy);
+        StartPttCommand       = new RelayCommand(StartPtt,          () => CanPtt);
+        StopPttCommand        = new AsyncRelayCommand(StopPttAsync);
+        ToggleWakeWordCommand = new RelayCommand(ToggleWakeWord,    () => IsWakeWordEnabled);
     }
 
     /// <summary>Call after the View has subscribed to events.</summary>
@@ -124,6 +133,84 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         finally
         {
             IsPttProcessing = false;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Wake word
+
+    private void ToggleWakeWord()
+    {
+        if (!IsWakeWordEnabled) return;
+
+        if (IsWakeWordActive)
+        {
+            StopWakeWord();
+        }
+        else
+        {
+            try
+            {
+                _wakeWord = new WakeWordService(_config.WakeWord);
+                _wakeWord.WakeWordDetected += OnWakeWordDetected;
+                _wakeWord.StartListening();
+                IsWakeWordActive = true;
+                SetStatus($"Listening for \"{_config.WakeWord}\"...");
+            }
+            catch (Exception ex)
+            {
+                SetStatus($"Wake word error: {ex.Message}", StatusKind.Error);
+            }
+        }
+    }
+
+    private void StopWakeWord()
+    {
+        _wakeWord?.StopListening();
+        _wakeWord?.Dispose();
+        _wakeWord = null;
+        IsWakeWordActive = false;
+        SetStatus("Ready");
+    }
+
+    private async void OnWakeWordDetected(object? sender, EventArgs e)
+    {
+        // Ignore if already busy
+        if (_stt is null || IsBusy || IsPttProcessing || IsRecording) return;
+
+        // Pause wake word engine so it doesn't double-fire during recording
+        _wakeWord?.StopListening();
+
+        IsRecording     = true;
+        IsPttProcessing = true;
+        SetStatus("Recording...", StatusKind.Busy);
+
+        try
+        {
+            var text = await _stt.AutoRecordAndTranscribeAsync(
+                silenceTimeout: TimeSpan.FromSeconds(1.5),
+                maxDuration:    TimeSpan.FromSeconds(10));
+
+            IsRecording = false;
+            SetStatus("Transcribing...", StatusKind.Busy);
+
+            if (!string.IsNullOrWhiteSpace(text))
+                await SendCoreAsync(text);
+            else
+                SetStatus("Ready");
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"STT error: {ex.Message}", StatusKind.Error);
+        }
+        finally
+        {
+            IsRecording     = false;
+            IsPttProcessing = false;
+
+            // Resume wake word listening if still toggled on
+            if (IsWakeWordActive)
+                _wakeWord?.StartListening();
         }
     }
 
@@ -197,7 +284,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     {
         var voices       = ScanPiperVoices();
         var currentModel = ResolveModelPath(_config.PiperModel ?? "");
-        return new SettingsViewModel(_claude.SystemPrompt, voices, currentModel, _config.PttKey ?? "F5");
+        return new SettingsViewModel(
+            _claude.SystemPrompt, voices, currentModel,
+            _config.PttKey ?? "F5", _config.WakeWord);
     }
 
     public void ApplySettings(SettingsViewModel vm)
@@ -210,6 +299,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
         PttKey = Enum.TryParse<Key>(vm.PttKey, ignoreCase: true, out var k) ? k : PttKey;
 
+        // If wake word text changed and listening is active, recreate the service
+        var wakeWordChanged = !string.Equals(vm.WakeWord, _config.WakeWord,
+            StringComparison.OrdinalIgnoreCase);
+
         _config = new AppConfig
         {
             AnthropicApiKey = _config.AnthropicApiKey,
@@ -219,9 +312,19 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             TtsRate         = _config.TtsRate,
             TtsVolume       = _config.TtsVolume,
             PttKey          = vm.PttKey,
+            WakeWord        = vm.WakeWord,
             SystemPrompt    = vm.SystemPrompt,
         };
         AppConfig.Save(_config);
+
+        if (wakeWordChanged && IsWakeWordActive)
+        {
+            StopWakeWord();
+            ToggleWakeWord(); // restart with new word
+        }
+
+        // Refresh tooltip
+        OnPropertyChanged(nameof(WakeWordTooltip));
     }
 
     // -------------------------------------------------------------------------
@@ -286,5 +389,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         return fullPath;
     }
 
-    public void Dispose() => _tts.Dispose();
+    public void Dispose()
+    {
+        StopWakeWord();
+        _tts.Dispose();
+    }
 }

@@ -18,6 +18,9 @@ public sealed class AppConfig
     // PTT keyboard shortcut — any System.Windows.Input.Key name, e.g. "F5", "LeftCtrl"
     public string PttKey { get; init; } = "F5";
 
+    // Wake word for always-on listening mode (e.g. "hey claude")
+    public string WakeWord { get; init; } = "hey claude";
+
     // Claude system prompt
     public string SystemPrompt { get; init; } =
         "You are a helpful voice assistant. Keep responses conversational and concise — they will be spoken aloud.";

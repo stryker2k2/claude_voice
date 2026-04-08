@@ -11,11 +11,13 @@ public sealed class SettingsViewModel : ViewModelBase
 {
     private string       _systemPrompt = "";
     private VoiceOption? _selectedVoice;
-    private string       _pttKey = "F5";
+    private string       _pttKey   = "F5";
+    private string       _wakeWord = "hey claude";
 
     public string       SystemPrompt  { get => _systemPrompt;  set => SetField(ref _systemPrompt, value); }
     public VoiceOption? SelectedVoice { get => _selectedVoice; set => SetField(ref _selectedVoice, value); }
     public string       PttKey        { get => _pttKey;        set => SetField(ref _pttKey, value); }
+    public string       WakeWord      { get => _wakeWord;      set => SetField(ref _wakeWord, value); }
 
     public IReadOnlyList<VoiceOption> AvailableVoices { get; }
 
@@ -23,10 +25,12 @@ public sealed class SettingsViewModel : ViewModelBase
         string systemPrompt,
         IReadOnlyList<VoiceOption> voices,
         string currentVoicePath,
-        string pttKey)
+        string pttKey,
+        string wakeWord)
     {
         _systemPrompt   = systemPrompt;
         _pttKey         = pttKey;
+        _wakeWord       = wakeWord;
         AvailableVoices = voices;
 
         var currentFile = Path.GetFileName(currentVoicePath);
