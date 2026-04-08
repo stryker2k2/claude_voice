@@ -252,7 +252,10 @@ public sealed class TtsEngine : IDisposable
         text = System.Text.RegularExpressions.Regex.Replace(text, @"\[(.+?)\]\(.+?\)", "$1");
         text = System.Text.RegularExpressions.Regex.Replace(text, @"^>\s*",            "", ML);
         text = System.Text.RegularExpressions.Regex.Replace(text, @"^[-*]{3,}\s*$",    "", ML);
-        text = System.Text.RegularExpressions.Regex.Replace(text, @"^[ \t]*[-*]\s+",  "", ML);
+        // Bullet items: strip the marker and append a comma so Piper pauses between items.
+        // The comma is dropped if the item already ends in terminal punctuation.
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"^[ \t]*[-*]\s+(.+?)[ \t]*$", "$1,", ML);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"([.!?:;]),", "$1"); // fix double-punct
         text = System.Text.RegularExpressions.Regex.Replace(text, @"`([^`\r\n]+)`", "$1");
         text = text.Replace("\"", "");
         text = text.Replace("(", ", ").Replace(")", ", ");

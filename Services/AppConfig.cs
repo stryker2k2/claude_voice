@@ -27,6 +27,9 @@ public sealed class AppConfig
     // Whether to persist conversation history between sessions
     public bool EnableMemory { get; init; } = true;
 
+    // Whether to enable Anthropic's built-in web search (web_search_20250305 beta tool)
+    public bool EnableWebSearch { get; init; } = false;
+
     // How long (seconds) of silence triggers end-of-speech detection
     public double SilenceTimeout { get; init; } = 4.0;
 

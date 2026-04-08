@@ -94,7 +94,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public MainViewModel()
     {
         _config = AppConfig.Load();
-        _claude = new ClaudeService(_config.AnthropicApiKey, _config.SystemPrompt);
+        _claude = new ClaudeService(_config.AnthropicApiKey, _config.SystemPrompt, _config.EnableWebSearch);
+        _claude.OnStatusUpdate = status =>
+            Application.Current.Dispatcher.Invoke(() => SetStatus(status, StatusKind.Busy));
         _tts    = new TtsEngine(_config);
         PttKey  = Enum.TryParse<Key>(_config.PttKey, ignoreCase: true, out var k) ? k : Key.F5;
 
@@ -453,7 +455,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         return new SettingsViewModel(
             _claude.SystemPrompt, voices, currentModel,
             _config.PttKey ?? "F5", _config.WakeWord, _config.AssistantName,
-            _config.EnableMemory, _config.SilenceTimeout, _config.VoiceThresholdDb,
+            _config.EnableMemory, _config.EnableWebSearch, _config.SilenceTimeout, _config.VoiceThresholdDb,
             wipeMemoryAction: () =>
             {
                 _memory.Wipe();
@@ -465,6 +467,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public void ApplySettings(SettingsViewModel vm)
     {
         _claude.SystemPrompt = vm.SystemPrompt;
+        _claude.SetWebSearch(vm.EnableWebSearch);
 
         var newModel = vm.SelectedVoice?.FullPath ?? _config.PiperModel ?? "";
         if (!string.IsNullOrEmpty(newModel))
@@ -489,6 +492,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             SystemPrompt    = vm.SystemPrompt,
             AssistantName   = vm.AssistantName,
             EnableMemory    = vm.EnableMemory,
+            EnableWebSearch = vm.EnableWebSearch,
             SilenceTimeout    = vm.SilenceTimeout,
             VoiceThresholdDb  = vm.VoiceThresholdDb,
         };

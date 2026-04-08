@@ -9,6 +9,7 @@
   "wakeWord": "hey claude",
   "assistantName": "Claude",
   "enableMemory": true,
+  "enableWebSearch": false,
   "silenceTimeout": 4.0,
   "voiceThresholdDb": -30.0,
   "systemPrompt": "You are a helpful voice assistant. Keep responses conversational and concise — they will be spoken aloud."

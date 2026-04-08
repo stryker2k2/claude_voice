@@ -25,7 +25,12 @@ public sealed class WakeWordService : IDisposable
         _engine.SetInputToDefaultAudioDevice();
     }
 
-    private bool _isListening;
+    private bool     _isListening;
+    private DateTime _lastTrigger = DateTime.MinValue;
+
+    // Minimum gap between two wake-word events. Prevents a single noisy audio
+    // burst from firing multiple back-to-back triggers.
+    private static readonly TimeSpan CooldownPeriod = TimeSpan.FromSeconds(3);
 
     public void StartListening()
     {
@@ -45,8 +50,18 @@ public sealed class WakeWordService : IDisposable
     {
         // Ignore events that arrive after StopListening was called (SAPI5 buffers audio)
         if (!_isListening) return;
-        if (e.Result.Confidence >= 0.5f)
-            WakeWordDetected?.Invoke(this, EventArgs.Empty);
+
+        // Higher confidence threshold to reduce false positives from background audio
+        // (TV, YouTube, etc.). SAPI5 reports 0.9+ for clearly spoken phrases up close;
+        // coincidental audio matches rarely exceed 0.75.
+        if (e.Result.Confidence < 0.85f) return;
+
+        // Cooldown — one trigger per window to absorb SAPI5 buffer echoes
+        var now = DateTime.UtcNow;
+        if (now - _lastTrigger < CooldownPeriod) return;
+        _lastTrigger = now;
+
+        WakeWordDetected?.Invoke(this, EventArgs.Empty);
     }
 
     public void Dispose()
