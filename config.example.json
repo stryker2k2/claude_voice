@@ -6,5 +6,10 @@
   "ttsRate": 0.2,
   "ttsVolume": 100,
   "pttKey": "F5",
-  "wakeWord": "hey claude"
+  "wakeWord": "hey claude",
+  "assistantName": "Claude",
+  "enableMemory": true,
+  "silenceTimeout": 4.0,
+  "voiceThresholdDb": -30.0,
+  "systemPrompt": "You are a helpful voice assistant. Keep responses conversational and concise — they will be spoken aloud."
 }
