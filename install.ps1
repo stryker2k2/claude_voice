@@ -47,18 +47,24 @@ if (Test-Path $iconSrc) {
     Copy-Item $iconSrc $installDir -Force
 }
 
-# --- 5. Copy config.json only if not already present (preserve user settings) ---
-$configSrc = Join-Path $projectDir "config.json"
-$configDst = Join-Path $installDir "config.json"
-if (-not (Test-Path $configDst)) {
-    if (Test-Path $configSrc) {
-        Write-Host "Copying config.json..."
-        Copy-Item $configSrc $configDst
-    } else {
-        Write-Warning "config.json not found - copy it to $installDir manually before launching."
-    }
-} else {
+# --- 5. Seed config.json if not already present (preserve user settings on update) ---
+$configDst     = Join-Path $installDir "config.json"
+$configSrc     = Join-Path $projectDir "config.json"
+$configExample = Join-Path $projectDir "config.example.json"
+if (Test-Path $configDst) {
     Write-Host "Preserving existing config.json."
+} elseif (Test-Path $configSrc) {
+    Write-Host "Copying config.json..."
+    Copy-Item $configSrc $configDst
+} elseif (Test-Path $configExample) {
+    Write-Host "Seeding config.json from config.example.json..."
+    Copy-Item $configExample $configDst
+    Write-Host ""
+    Write-Host "ACTION REQUIRED: Add your Anthropic API key to:" -ForegroundColor Yellow
+    Write-Host "  $configDst" -ForegroundColor Yellow
+    Write-Host ""
+} else {
+    Write-Warning "No config found - create $configDst before launching."
 }
 
 # --- 6. Create Start Menu shortcut ---
