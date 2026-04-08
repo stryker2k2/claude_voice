@@ -15,8 +15,8 @@ public sealed class TtsEngine : IDisposable
     // -------------------------------------------------------------------------
     // Piper backend fields
     private readonly bool   _usePiper;
-    private readonly string _piperExe   = "";
-    private readonly string _piperModel = "";
+    private readonly string _piperExe = "";
+    private          string _piperModel = "";
     private readonly double _piperLengthScale;
 
     // -------------------------------------------------------------------------
@@ -57,6 +57,9 @@ public sealed class TtsEngine : IDisposable
             _synth.Options.AudioVolume  = Math.Clamp(config.TtsVolume / 100.0, 0.0, 1.0);
         }
     }
+
+    /// <summary>Swaps the Piper voice model at runtime.</summary>
+    public void ChangeVoice(string modelPath) => _piperModel = modelPath;
 
     /// <summary>Returns all voices visible to the WinRT SpeechSynthesizer (informational).</summary>
     public IReadOnlyList<VoiceInformation> GetAvailableVoices() =>

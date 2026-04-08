@@ -54,26 +54,10 @@ public sealed class AppConfig
             "config.json not found. Copy config.example.json to config.json and fill in your API key.");
     }
 
-    /// <summary>
-    /// Saves a new config over the file that was originally loaded.
-    /// Only the system prompt is mutable at runtime; all other fields are preserved.
-    /// </summary>
-    public static void SaveSystemPrompt(AppConfig current, string newPrompt)
+    /// <summary>Saves the supplied config over the file that was originally loaded.</summary>
+    public static void Save(AppConfig updated)
     {
         if (_loadedPath is null) return;
-
-        var updated = new AppConfig
-        {
-            AnthropicApiKey = current.AnthropicApiKey,
-            WhisperModel    = current.WhisperModel,
-            PiperExe        = current.PiperExe,
-            PiperModel      = current.PiperModel,
-            TtsRate         = current.TtsRate,
-            TtsVolume       = current.TtsVolume,
-            PttKey          = current.PttKey,
-            SystemPrompt    = newPrompt,
-        };
-
         File.WriteAllText(_loadedPath, JsonSerializer.Serialize(updated, _writeOptions));
     }
 }

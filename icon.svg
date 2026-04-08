@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="bubbleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1A6FB5;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0A4A80;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Speech bubble body -->
+  <path d="
+    M 8 6
+    Q 8 4 10 4
+    L 54 4
+    Q 56 4 56 6
+    L 56 42
+    Q 56 44 54 44
+    L 22 44
+    L 10 58
+    L 14 44
+    L 10 44
+    Q 8 44 8 42
+    Z
+  " fill="url(#bubbleGrad)" />
+
+  <!-- Waveform bars (5 bars, centered vertically in bubble) -->
+  <!-- Bar 1 - short -->
+  <rect x="17" y="21" width="5" height="10" rx="2.5" fill="white" opacity="0.85"/>
+  <!-- Bar 2 - tall -->
+  <rect x="24" y="15" width="5" height="22" rx="2.5" fill="white"/>
+  <!-- Bar 3 - medium -->
+  <rect x="31" y="18" width="5" height="16" rx="2.5" fill="white" opacity="0.95"/>
+  <!-- Bar 4 - tall -->
+  <rect x="38" y="14" width="5" height="24" rx="2.5" fill="white"/>
+  <!-- Bar 5 - short -->
+  <rect x="45" y="20" width="5" height="12" rx="2.5" fill="white" opacity="0.85"/>
+</svg>

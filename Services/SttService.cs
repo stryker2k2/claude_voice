@@ -39,17 +39,25 @@ public sealed class SttService : IDisposable
     public async Task<string> StopAndTranscribeAsync(CancellationToken ct = default)
     {
         if (!IsRecording) return "";
+        IsRecording = false;
 
-        _waveIn!.StopRecording();
+        // Wait for RecordingStopped so DataAvailable fully drains before we dispose the writer
+        var tcs = new TaskCompletionSource();
+        _waveIn!.RecordingStopped += (_, _) => tcs.TrySetResult();
+        _waveIn.StopRecording();
+        await tcs.Task;
+
         _waveIn.Dispose();
         _waveIn = null;
 
         _waveWriter!.Dispose();
         _waveWriter = null;
-        IsRecording = false;
 
         try
         {
+            // WAV header is 44 bytes — anything at or below that has no audio data
+            if (new FileInfo(_tempFile).Length <= 44) return "";
+
             using var processor = _factory.CreateBuilder()
                 .WithLanguage("en")
                 .Build();
