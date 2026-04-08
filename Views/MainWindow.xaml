@@ -111,10 +111,11 @@
 
                     <!-- Settings -->
                     <Button Grid.Column="1"
-                            Content="&#x2699;" Width="34" Height="34" Margin="0,0,8,0"
+                            Content="&#xE713;" Width="34" Height="34" Margin="0,0,8,0"
                             Background="#3C3C3C" Foreground="#D4D4D4"
                             BorderBrush="#555555" BorderThickness="1"
-                            FontSize="16" Cursor="Hand" ToolTip="Settings"
+                            FontFamily="Segoe MDL2 Assets" FontSize="16"
+                            Cursor="Hand" ToolTip="Settings"
                             Click="SettingsButton_Click"/>
 
                     <!-- PTT -->
@@ -128,7 +129,7 @@
                             PreviewMouseLeftButtonDown="PttButton_MouseDown"
                             PreviewMouseLeftButtonUp="PttButton_MouseUp">
                         <Button.Style>
-                            <Style TargetType="Button">
+                            <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
                                 <Setter Property="Background" Value="#3C3C3C"/>
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsRecording}" Value="True">

@@ -14,6 +14,55 @@
     <SolidColorBrush x:Key="Brush.Accent"             Color="#0E639C"/>
 
     <!-- =====================================================================
+         Button — full ControlTemplate so hover text colour is actually respected
+         ===================================================================== -->
+    <Style TargetType="Button">
+        <Setter Property="Foreground"       Value="#D4D4D4"/>
+        <Setter Property="Background"       Value="#3C3C3C"/>
+        <Setter Property="BorderBrush"      Value="#555555"/>
+        <Setter Property="BorderThickness"  Value="1"/>
+        <Setter Property="FontFamily"       Value="Segoe UI"/>
+        <Setter Property="Cursor"           Value="Hand"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="2"
+                            SnapsToDevicePixels="True">
+                        <ContentPresenter x:Name="content"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          Margin="{TemplateBinding Padding}"
+                                          TextElement.Foreground="{TemplateBinding Foreground}"
+                                          RecognizesAccessKey="True"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="border"  Property="Background"               Value="#BEE6FD"/>
+                            <Setter TargetName="border"  Property="BorderBrush"              Value="#3C7FB1"/>
+                            <Setter TargetName="content" Property="TextElement.Foreground"   Value="#1E1E1E"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="border"  Property="Background"               Value="#A0D8F0"/>
+                            <Setter TargetName="border"  Property="BorderBrush"              Value="#2C6FA0"/>
+                            <Setter TargetName="content" Property="TextElement.Foreground"   Value="#1E1E1E"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="border"  Property="Background"               Value="#2A2A2A"/>
+                            <Setter TargetName="border"  Property="BorderBrush"              Value="#3C3C3C"/>
+                            <Setter TargetName="content" Property="TextElement.Foreground"   Value="#555555"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- =====================================================================
          ComboBox — ToggleButton (the closed face)
          ===================================================================== -->
     <Style x:Key="DarkComboBoxToggleButton" TargetType="{x:Type ToggleButton}">

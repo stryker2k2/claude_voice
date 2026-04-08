@@ -47,7 +47,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     // -------------------------------------------------------------------------
     // PTT key (read by View for keyboard handling)
 
-    public Key PttKey { get; }
+    public Key PttKey { get; private set; }
 
     // -------------------------------------------------------------------------
     // Commands
@@ -197,7 +197,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     {
         var voices       = ScanPiperVoices();
         var currentModel = ResolveModelPath(_config.PiperModel ?? "");
-        return new SettingsViewModel(_claude.SystemPrompt, voices, currentModel);
+        return new SettingsViewModel(_claude.SystemPrompt, voices, currentModel, _config.PttKey ?? "F5");
     }
 
     public void ApplySettings(SettingsViewModel vm)
@@ -208,6 +208,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         if (!string.IsNullOrEmpty(newModel))
             _tts.ChangeVoice(newModel);
 
+        PttKey = Enum.TryParse<Key>(vm.PttKey, ignoreCase: true, out var k) ? k : PttKey;
+
         _config = new AppConfig
         {
             AnthropicApiKey = _config.AnthropicApiKey,
@@ -216,7 +218,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             PiperModel      = ToRelativePath(newModel),
             TtsRate         = _config.TtsRate,
             TtsVolume       = _config.TtsVolume,
-            PttKey          = _config.PttKey,
+            PttKey          = vm.PttKey,
             SystemPrompt    = vm.SystemPrompt,
         };
         AppConfig.Save(_config);

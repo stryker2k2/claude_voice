@@ -41,11 +41,12 @@ public sealed class SttService : IDisposable
         if (!IsRecording) return "";
         IsRecording = false;
 
-        // Wait for RecordingStopped so DataAvailable fully drains before we dispose the writer
+        // Wait for RecordingStopped so DataAvailable fully drains before we dispose the writer.
+        // Timeout guards against NAudio never firing the event (e.g. recording never fully started).
         var tcs = new TaskCompletionSource();
         _waveIn!.RecordingStopped += (_, _) => tcs.TrySetResult();
         _waveIn.StopRecording();
-        await tcs.Task;
+        await tcs.Task.WaitAsync(TimeSpan.FromSeconds(3), ct).ConfigureAwait(false);
 
         _waveIn.Dispose();
         _waveIn = null;
@@ -55,8 +56,10 @@ public sealed class SttService : IDisposable
 
         try
         {
-            // WAV header is 44 bytes — anything at or below that has no audio data
-            if (new FileInfo(_tempFile).Length <= 44) return "";
+            // Require at least ~500 ms of audio (16 kHz × 2 bytes × 0.5 s = 16 000 bytes + 44 header).
+            // Shorter clips confuse Whisper and are almost certainly accidental taps.
+            const long MinAudioBytes = 44 + 16_000;
+            if (new FileInfo(_tempFile).Length < MinAudioBytes) return "";
 
             using var processor = _factory.CreateBuilder()
                 .WithLanguage("en")
