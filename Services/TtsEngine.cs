@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.IO;
 using NAudio.Wave;
-using NAudio.Wave.SampleProviders;
 using Windows.Media.SpeechSynthesis;
 using Windows.Storage.Streams;
 
@@ -160,6 +159,10 @@ public sealed class TtsEngine : IDisposable
 
     private async Task PlayWavAsync(string wavFile, CancellationToken ct)
     {
+        // Prepend 200 ms of PCM silence directly into the WAV bytes so the
+        // audio device warms up before speech starts (avoids first-word clipping).
+        PrependSilence(wavFile, milliseconds: 200);
+
         using var reader  = new AudioFileReader(wavFile);
         using var waveOut = new WaveOutEvent();
 
@@ -171,11 +174,7 @@ public sealed class TtsEngine : IDisposable
         var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         waveOut.PlaybackStopped += (_, _) => tcs.TrySetResult();
 
-        // Prepend 200 ms of silence so the audio device warms up before speech starts
-        var silence = new SilenceProvider(reader.WaveFormat).ToSampleProvider()
-                          .Take(TimeSpan.FromMilliseconds(200));
-        var audio   = new ConcatenatingSampleProvider([silence, reader.ToSampleProvider()]);
-        waveOut.Init(audio);
+        waveOut.Init(reader);
         waveOut.Play();
 
         // Wait for the PlaybackStopped event rather than polling state,
@@ -183,6 +182,39 @@ public sealed class TtsEngine : IDisposable
         await tcs.Task;
 
         lock (_waveOutLock) { if (_waveOut == waveOut) _waveOut = null; }
+    }
+
+    /// <summary>
+    /// Prepends <paramref name="milliseconds"/> ms of zero-filled PCM silence
+    /// to a WAV file by rewriting it in-place.
+    /// </summary>
+    private static void PrependSilence(string wavFile, int milliseconds)
+    {
+        var original = File.ReadAllBytes(wavFile);
+        if (original.Length < 44) return; // invalid WAV
+
+        // Parse sample rate, channels, bits-per-sample from the WAV header
+        int sampleRate    = BitConverter.ToInt32(original, 24);
+        short channels    = BitConverter.ToInt16(original, 22);
+        short bitsPerSamp = BitConverter.ToInt16(original, 34);
+
+        int silenceSamples = (int)(sampleRate * milliseconds / 1000.0);
+        int silenceBytes   = silenceSamples * channels * (bitsPerSamp / 8);
+
+        // Build new WAV: header (44 bytes) + silence + original audio data
+        var audioData    = original[44..];
+        var newAudioSize = audioData.Length + silenceBytes;
+        var output       = new byte[44 + newAudioSize];
+
+        System.Buffer.BlockCopy(original, 0, output, 0, 44); // copy header
+        // silence bytes are already zero
+        System.Buffer.BlockCopy(audioData, 0, output, 44 + silenceBytes, audioData.Length);
+
+        // Update the chunk size fields in the header
+        BitConverter.TryWriteBytes(output.AsSpan(4),  (uint)(output.Length - 8));
+        BitConverter.TryWriteBytes(output.AsSpan(40), (uint)newAudioSize);
+
+        File.WriteAllBytes(wavFile, output);
     }
 
     // -------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Text;
+using System.Threading.Channels;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -128,7 +129,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     public async Task StopPttAsync()
     {
-        if (_stt is null || !_stt.IsRecording) return;
+        // Only act on a manual PTT session (IsRecording = true).
+        // Auto-record sessions (wake word / conversation mode) do not set IsRecording,
+        // so we must not interfere with them.
+        if (_stt is null || !_stt.IsRecording || !IsRecording) return;
         IsRecording     = false;
         IsPttProcessing = true;
         SetStatus("Transcribing...", StatusKind.Busy);
@@ -195,7 +199,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         // Pause wake word engine so it doesn't double-fire during recording
         _wakeWord?.StopListening();
 
-        IsRecording     = true;
+        // Use only IsPttProcessing to block manual PTT — NOT IsRecording,
+        // which would turn the Hold-to-Talk button red and confuse the user
+        // into clicking it, which would race with AutoRecordAndTranscribeAsync.
         IsPttProcessing = true;
         SetStatus("Recording...", StatusKind.Busy);
 
@@ -205,7 +211,6 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 silenceTimeout: TimeSpan.FromSeconds(2.5),
                 maxDuration:    TimeSpan.FromSeconds(30));
 
-            IsRecording = false;
             SetStatus("Transcribing...", StatusKind.Busy);
 
             if (!string.IsNullOrWhiteSpace(text) && !IsNoiseTranscription(text))
@@ -219,7 +224,6 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
         finally
         {
-            IsRecording     = false;
             IsPttProcessing = false;
             // Wake word is resumed by ResumeAfterSpeakingAsync once TTS finishes
         }
@@ -251,7 +255,31 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         });
 
         _streamCts = new CancellationTokenSource();
-        var sb = new StringBuilder();
+        var sb             = new StringBuilder();
+        var sentenceBuffer = new StringBuilder();
+        var sentenceChannel = Channel.CreateUnbounded<string>(
+            new UnboundedChannelOptions { SingleReader = true });
+
+        // Start TTS consumer — speaks each sentence as soon as it is enqueued,
+        // running concurrently with the streaming below.
+        _ttsCts?.Cancel();
+        _ttsCts?.Dispose();
+        _ttsCts = new CancellationTokenSource();
+        var ttsCts = _ttsCts;
+        IsSpeaking = true;
+        SetStatus("Talking...", StatusKind.Busy);
+        if (IsWakeWordActive) _wakeWord?.StopListening();
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await foreach (var sentence in sentenceChannel.Reader.ReadAllAsync(ttsCts.Token))
+                    await _tts.SpeakAsync(sentence, ttsCts.Token);
+            }
+            catch (OperationCanceledException) { }
+            finally { await ResumeAfterSpeakingAsync(); }
+        }, CancellationToken.None);
 
         try
         {
@@ -265,8 +293,17 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                         assistantMsg.Text = sb.ToString();
                         ScrollRequested?.Invoke(this, EventArgs.Empty);
                     });
+
+                    // Buffer token and flush any complete sentences to the TTS queue
+                    sentenceBuffer.Append(token);
+                    FlushSentences(sentenceBuffer, sentenceChannel.Writer);
                 },
                 _streamCts.Token);
+
+            // Flush whatever is left in the buffer after streaming ends
+            var remaining = sentenceBuffer.ToString().Trim();
+            if (!string.IsNullOrWhiteSpace(remaining))
+                sentenceChannel.Writer.TryWrite(remaining);
 
             if (_config.EnableMemory)
             {
@@ -274,21 +311,6 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 _memoryEntries.Add(new MemoryEntry("assistant", sb.ToString()));
                 _memory.Save(_memoryEntries);
             }
-
-            _ttsCts?.Cancel();
-            _ttsCts?.Dispose();
-            _ttsCts = new CancellationTokenSource();
-            var ttsCts = _ttsCts;
-            IsSpeaking = true;
-            SetStatus("Talking...", StatusKind.Busy);
-            // Pause wake word while TTS plays so Claude's voice doesn't trigger it
-            if (IsWakeWordActive) _wakeWord?.StopListening();
-            _ = Task.Run(async () =>
-            {
-                try   { await _tts.SpeakAsync(sb.ToString(), ttsCts.Token); }
-                catch (OperationCanceledException) { }
-                finally { await ResumeAfterSpeakingAsync(); }
-            }, CancellationToken.None);
         }
         catch (OperationCanceledException)
         {
@@ -296,15 +318,70 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
         catch (Exception ex)
         {
-            Application.Current.Dispatcher.Invoke(() => assistantMsg.Text = $"Error: {ex.Message}");
-            SetStatus("Error", StatusKind.Error);
+            // Only overwrite the bubble if nothing was generated yet.
+            // If content was already streaming (and TTS is speaking it), leave it intact.
+            if (sb.Length == 0)
+                Application.Current.Dispatcher.Invoke(() => assistantMsg.Text = $"Error: {ex.Message}");
+            SetStatus($"Error: {ErrorLabel(ex)}", StatusKind.Error);
         }
         finally
         {
+            // Signal TTS consumer that no more sentences are coming
+            sentenceChannel.Writer.TryComplete();
             IsBusy = false;
             _streamCts.Dispose();
             _streamCts = null;
         }
+    }
+
+    /// <summary>
+    /// Scans <paramref name="buffer"/> for complete sentences and writes chunks to
+    /// the TTS channel once enough text has accumulated, leaving any incomplete tail
+    /// in the buffer.
+    ///
+    /// Chunks are only emitted when the accumulated text reaches
+    /// <see cref="MinTtsChunkChars"/> characters, or on a paragraph break.
+    /// This prevents Piper from being invoked for every tiny sentence, which adds
+    /// per-process startup overhead and makes short responses slower.
+    /// </summary>
+    private static void FlushSentences(StringBuilder buffer, ChannelWriter<string> writer)
+    {
+        const int MinTtsChunkChars = 200;
+
+        var text  = buffer.ToString();
+        int start = 0;
+
+        for (int i = 0; i < text.Length - 1; i++)
+        {
+            char c    = text[i];
+            char next = text[i + 1];
+
+            bool isSentenceEnd = (c is '.' or '!' or '?') &&
+                                 (char.IsWhiteSpace(next) || next is '\r' or '\n');
+            bool isParagraph   = c == '\n' && next == '\n';
+
+            if (!isSentenceEnd && !isParagraph) continue;
+
+            // Skip whitespace after the break point
+            int skip = i + 1;
+            while (skip < text.Length && char.IsWhiteSpace(text[skip])) skip++;
+
+            var candidate = text[start..skip].Trim();
+
+            // Emit only if we've accumulated enough text, or hit a paragraph break
+            if (candidate.Length >= MinTtsChunkChars || isParagraph)
+            {
+                if (!string.IsNullOrWhiteSpace(candidate))
+                    writer.TryWrite(candidate);
+                start = skip;
+                i     = start - 1; // loop will increment
+            }
+            // Otherwise keep accumulating sentences
+        }
+
+        buffer.Clear();
+        if (start < text.Length)
+            buffer.Append(text[start..]);
     }
 
     // -------------------------------------------------------------------------
@@ -374,7 +451,35 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     /// These should not be forwarded to Claude.
     /// </summary>
     private static bool IsNoiseTranscription(string text) =>
-        System.Text.RegularExpressions.Regex.IsMatch(text.Trim(), @"^\[.*\]$");
+        System.Text.RegularExpressions.Regex.IsMatch(text.Trim(), @"^[\[\(].*[\]\)]$");
+
+    /// <summary>Returns a short label for display in the status bar.</summary>
+    private static string ErrorLabel(Exception ex)
+    {
+        var msg = ex.Message;
+        if (msg.Contains("Output blocked",    StringComparison.OrdinalIgnoreCase) ||
+            msg.Contains("content filter",    StringComparison.OrdinalIgnoreCase) ||
+            msg.Contains("content filtering", StringComparison.OrdinalIgnoreCase) ||
+            msg.Contains("content policy",    StringComparison.OrdinalIgnoreCase))
+            return "Content Filter";
+        if (msg.Contains("copyright",    StringComparison.OrdinalIgnoreCase))
+            return "Copyright Filter";
+        if (msg.Contains("rate limit",   StringComparison.OrdinalIgnoreCase) ||
+            msg.Contains("rate_limit",   StringComparison.OrdinalIgnoreCase) ||
+            msg.Contains("429",          StringComparison.Ordinal))
+            return "Rate Limited";
+        if (msg.Contains("unauthorized", StringComparison.OrdinalIgnoreCase) ||
+            msg.Contains("api key",      StringComparison.OrdinalIgnoreCase) ||
+            msg.Contains("401",          StringComparison.Ordinal))
+            return "Auth Failed";
+        if (msg.Contains("timeout",      StringComparison.OrdinalIgnoreCase))
+            return "Timed Out";
+        if (msg.Contains("network",      StringComparison.OrdinalIgnoreCase) ||
+            msg.Contains("connection",   StringComparison.OrdinalIgnoreCase))
+            return "Network Error";
+        // Fallback: first 40 chars of the message
+        return msg.Length > 40 ? msg[..40].TrimEnd() + "…" : msg;
+    }
 
     private enum StatusKind { Ready, Busy, Error }
 
@@ -459,8 +564,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        // Open a follow-up listen window — user has 5 s to start speaking
-        IsRecording     = true;
+        // Open a follow-up listen window — user has 5 s to start speaking.
+        // Only set IsPttProcessing (blocks PTT) — NOT IsRecording, which would
+        // turn the Hold-to-Talk button red and confuse the user.
         IsPttProcessing = true;
         Application.Current.Dispatcher.Invoke(() => SetStatus("Your turn...", StatusKind.Ready));
 
@@ -471,8 +577,6 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 silenceTimeout:  TimeSpan.FromSeconds(2.5),
                 maxDuration:     TimeSpan.FromSeconds(30),
                 noSpeechTimeout: TimeSpan.FromSeconds(5));
-
-            IsRecording = false;
 
             if (!string.IsNullOrWhiteSpace(text) && !IsNoiseTranscription(text))
             {
@@ -488,7 +592,6 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         }
         finally
         {
-            IsRecording     = false;
             IsPttProcessing = false;
         }
 
