@@ -4,3 +4,4 @@ obj
 config.json
 whisper/
 piper/
+*.png
