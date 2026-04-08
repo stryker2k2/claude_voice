@@ -21,6 +21,12 @@ public sealed class AppConfig
     // Wake word for always-on listening mode (e.g. "hey claude")
     public string WakeWord { get; init; } = "hey claude";
 
+    // Display name shown in chat bubbles and used as the assistant's identity
+    public string AssistantName { get; init; } = "Claude";
+
+    // Whether to persist conversation history between sessions
+    public bool EnableMemory { get; init; } = true;
+
     // Claude system prompt
     public string SystemPrompt { get; init; } =
         "You are a helpful voice assistant. Keep responses conversational and concise — they will be spoken aloud.";

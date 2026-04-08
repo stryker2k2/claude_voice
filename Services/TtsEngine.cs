@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
-using System.Media;
+using NAudio.Wave;
+using NAudio.Wave.SampleProviders;
 using Windows.Media.SpeechSynthesis;
 using Windows.Storage.Streams;
 
@@ -22,6 +23,11 @@ public sealed class TtsEngine : IDisposable
     // -------------------------------------------------------------------------
     // WinRT backend fields
     private readonly SpeechSynthesizer _synth;
+
+    // -------------------------------------------------------------------------
+    // Active playback — held so Stop() can cancel mid-sentence
+    private WaveOutEvent? _waveOut;
+    private readonly object _waveOutLock = new();
 
     // -------------------------------------------------------------------------
     // Shared
@@ -60,6 +66,12 @@ public sealed class TtsEngine : IDisposable
 
     /// <summary>Swaps the Piper voice model at runtime.</summary>
     public void ChangeVoice(string modelPath) => _piperModel = modelPath;
+
+    /// <summary>Immediately stops any audio currently playing.</summary>
+    public void Stop()
+    {
+        lock (_waveOutLock) { _waveOut?.Stop(); }
+    }
 
     /// <summary>Returns all voices visible to the WinRT SpeechSynthesizer (informational).</summary>
     public IReadOnlyList<VoiceInformation> GetAvailableVoices() =>
@@ -110,8 +122,7 @@ public sealed class TtsEngine : IDisposable
             if (proc.ExitCode != 0)
                 throw new InvalidOperationException($"piper.exe exited with code {proc.ExitCode}");
 
-            using var player = new SoundPlayer(tmpFile);
-            player.PlaySync();
+            await PlayWavAsync(tmpFile, ct);
         }
         finally
         {
@@ -136,13 +147,42 @@ public sealed class TtsEngine : IDisposable
         try
         {
             await File.WriteAllBytesAsync(tmpFile, bytes, ct);
-            using var player = new SoundPlayer(tmpFile);
-            player.PlaySync();
+            await PlayWavAsync(tmpFile, ct);
         }
         finally
         {
             try { File.Delete(tmpFile); } catch { /* best-effort */ }
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Shared playback helper
+
+    private async Task PlayWavAsync(string wavFile, CancellationToken ct)
+    {
+        using var reader  = new AudioFileReader(wavFile);
+        using var waveOut = new WaveOutEvent();
+
+        lock (_waveOutLock) { _waveOut = waveOut; }
+
+        // Cancel immediately when token fires
+        ct.Register(() => { lock (_waveOutLock) { _waveOut?.Stop(); } });
+
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        waveOut.PlaybackStopped += (_, _) => tcs.TrySetResult();
+
+        // Prepend 200 ms of silence so the audio device warms up before speech starts
+        var silence = new SilenceProvider(reader.WaveFormat).ToSampleProvider()
+                          .Take(TimeSpan.FromMilliseconds(200));
+        var audio   = new ConcatenatingSampleProvider([silence, reader.ToSampleProvider()]);
+        waveOut.Init(audio);
+        waveOut.Play();
+
+        // Wait for the PlaybackStopped event rather than polling state,
+        // which can briefly flicker between buffer fills at punctuation pauses.
+        await tcs.Task;
+
+        lock (_waveOutLock) { if (_waveOut == waveOut) _waveOut = null; }
     }
 
     // -------------------------------------------------------------------------

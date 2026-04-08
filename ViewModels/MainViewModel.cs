@@ -16,6 +16,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private          CancellationTokenSource? _streamCts;
     private          string?       _initWarning;
     private          WakeWordService? _wakeWord;
+    private          CancellationTokenSource? _ttsCts;
+    private readonly MemoryService _memory = new();
+    private readonly List<MemoryEntry> _memoryEntries = [];
 
     // -------------------------------------------------------------------------
     // Bindable state
@@ -26,6 +29,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private bool   _isBusy;
     private bool   _isRecording;
     private bool   _isWakeWordActive;
+    private bool   _isSpeaking;
     private string _userInputText = "";
 
     public ObservableCollection<ChatMessage> Messages { get; } = [];
@@ -36,6 +40,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public bool   IsRecording       { get => _isRecording;       private set { SetField(ref _isRecording, value);       RaiseCanExecute(); } }
     public bool   IsPttProcessing   { get => _isPttProcessing;   private set { SetField(ref _isPttProcessing, value);   RaiseCanExecute(); } }
     public bool   IsWakeWordActive  { get => _isWakeWordActive;  private set { SetField(ref _isWakeWordActive, value);  RaiseCanExecute(); } }
+    public bool   IsSpeaking        { get => _isSpeaking;        private set { SetField(ref _isSpeaking, value);        RaiseCanExecute(); } }
     public bool   CanPtt            => !_isBusy && !_isPttProcessing && _stt is not null;
     public bool   CanUsePtt         => _stt is not null && !_isBusy && !_isPttProcessing;
     public bool   IsPttEnabled      => _stt is not null;
@@ -63,6 +68,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public ICommand          StartPttCommand        { get; }
     public AsyncRelayCommand StopPttCommand         { get; }
     public ICommand          ToggleWakeWordCommand  { get; }
+    public ICommand          StopSpeakingCommand    { get; }
 
     // -------------------------------------------------------------------------
     // Events raised for the View
@@ -85,6 +91,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _tts    = new TtsEngine(_config);
         PttKey  = Enum.TryParse<Key>(_config.PttKey, ignoreCase: true, out var k) ? k : Key.F5;
 
+        if (_config.EnableMemory)
+        {
+            _memoryEntries.AddRange(_memory.Load());
+            if (_memoryEntries.Count > 0)
+                _claude.LoadHistory(_memoryEntries);
+        }
+
         try { _stt = new SttService(ResolveModelPath(_config.WhisperModel)); }
         catch (FileNotFoundException ex) { _initWarning = ex.Message; }
 
@@ -92,6 +105,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         StartPttCommand       = new RelayCommand(StartPtt,          () => CanPtt);
         StopPttCommand        = new AsyncRelayCommand(StopPttAsync);
         ToggleWakeWordCommand = new RelayCommand(ToggleWakeWord,    () => IsWakeWordEnabled);
+        StopSpeakingCommand   = new RelayCommand(StopSpeaking,      () => IsSpeaking);
     }
 
     /// <summary>Call after the View has subscribed to events.</summary>
@@ -121,7 +135,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         try
         {
             var text = await _stt.StopAndTranscribeAsync();
-            if (!string.IsNullOrWhiteSpace(text))
+            if (!string.IsNullOrWhiteSpace(text) && !IsNoiseTranscription(text))
                 await SendCoreAsync(text);
             else
                 SetStatus("Ready");
@@ -188,13 +202,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         try
         {
             var text = await _stt.AutoRecordAndTranscribeAsync(
-                silenceTimeout: TimeSpan.FromSeconds(1.5),
-                maxDuration:    TimeSpan.FromSeconds(10));
+                silenceTimeout: TimeSpan.FromSeconds(2.5),
+                maxDuration:    TimeSpan.FromSeconds(30));
 
             IsRecording = false;
             SetStatus("Transcribing...", StatusKind.Busy);
 
-            if (!string.IsNullOrWhiteSpace(text))
+            if (!string.IsNullOrWhiteSpace(text) && !IsNoiseTranscription(text))
                 await SendCoreAsync(text);
             else
                 SetStatus("Ready");
@@ -207,10 +221,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         {
             IsRecording     = false;
             IsPttProcessing = false;
-
-            // Resume wake word listening if still toggled on
-            if (IsWakeWordActive)
-                _wakeWord?.StartListening();
+            // Wake word is resumed by ResumeAfterSpeakingAsync once TTS finishes
         }
     }
 
@@ -229,8 +240,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     {
         IsBusy = true;
 
-        var userMsg      = new ChatMessage { Role = "user",      Text = userText };
-        var assistantMsg = new ChatMessage { Role = "assistant"             };
+        var userMsg      = new ChatMessage { Role = "user",      DisplayName = "You",                    Text = userText };
+        var assistantMsg = new ChatMessage { Role = "assistant", DisplayName = _config.AssistantName };
 
         Application.Current.Dispatcher.Invoke(() =>
         {
@@ -257,8 +268,27 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 },
                 _streamCts.Token);
 
-            _ = Task.Run(() => _tts.SpeakAsync(sb.ToString()), CancellationToken.None);
-            SetStatus("Ready");
+            if (_config.EnableMemory)
+            {
+                _memoryEntries.Add(new MemoryEntry("user",      userText));
+                _memoryEntries.Add(new MemoryEntry("assistant", sb.ToString()));
+                _memory.Save(_memoryEntries);
+            }
+
+            _ttsCts?.Cancel();
+            _ttsCts?.Dispose();
+            _ttsCts = new CancellationTokenSource();
+            var ttsCts = _ttsCts;
+            IsSpeaking = true;
+            SetStatus("Talking...", StatusKind.Busy);
+            // Pause wake word while TTS plays so Claude's voice doesn't trigger it
+            if (IsWakeWordActive) _wakeWord?.StopListening();
+            _ = Task.Run(async () =>
+            {
+                try   { await _tts.SpeakAsync(sb.ToString(), ttsCts.Token); }
+                catch (OperationCanceledException) { }
+                finally { await ResumeAfterSpeakingAsync(); }
+            }, CancellationToken.None);
         }
         catch (OperationCanceledException)
         {
@@ -286,7 +316,14 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         var currentModel = ResolveModelPath(_config.PiperModel ?? "");
         return new SettingsViewModel(
             _claude.SystemPrompt, voices, currentModel,
-            _config.PttKey ?? "F5", _config.WakeWord);
+            _config.PttKey ?? "F5", _config.WakeWord, _config.AssistantName,
+            _config.EnableMemory,
+            wipeMemoryAction: () =>
+            {
+                _memory.Wipe();
+                _memoryEntries.Clear();
+                _claude.ClearHistory();
+            });
     }
 
     public void ApplySettings(SettingsViewModel vm)
@@ -314,6 +351,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             PttKey          = vm.PttKey,
             WakeWord        = vm.WakeWord,
             SystemPrompt    = vm.SystemPrompt,
+            AssistantName   = vm.AssistantName,
+            EnableMemory    = vm.EnableMemory,
         };
         AppConfig.Save(_config);
 
@@ -329,6 +368,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     // -------------------------------------------------------------------------
     // Helpers
+
+    /// <summary>
+    /// Returns true for Whisper noise annotations like [BLANK_AUDIO], [ Silence ], etc.
+    /// These should not be forwarded to Claude.
+    /// </summary>
+    private static bool IsNoiseTranscription(string text) =>
+        System.Text.RegularExpressions.Regex.IsMatch(text.Trim(), @"^\[.*\]$");
 
     private enum StatusKind { Ready, Busy, Error }
 
@@ -389,9 +435,91 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         return fullPath;
     }
 
+    /// <summary>
+    /// Called after TTS finishes. If wake word mode is active, opens a 5-second
+    /// listen window so the user can reply without re-saying the wake word.
+    /// Falls back to wake word listening if no speech is detected in time.
+    /// </summary>
+    private async Task ResumeAfterSpeakingAsync()
+    {
+        Application.Current.Dispatcher.Invoke(() => IsSpeaking = false);
+
+        if (!IsWakeWordActive)
+        {
+            Application.Current.Dispatcher.Invoke(() => SetStatus("Ready"));
+            return;
+        }
+
+        // Brief pause so the last word of TTS fully clears the mic
+        await Task.Delay(1000);
+
+        if (!IsWakeWordActive || _stt is null)
+        {
+            Application.Current.Dispatcher.Invoke(() => SetStatus("Ready"));
+            return;
+        }
+
+        // Open a follow-up listen window — user has 5 s to start speaking
+        IsRecording     = true;
+        IsPttProcessing = true;
+        Application.Current.Dispatcher.Invoke(() => SetStatus("Your turn...", StatusKind.Ready));
+
+        string text = "";
+        try
+        {
+            text = await _stt.AutoRecordAndTranscribeAsync(
+                silenceTimeout:  TimeSpan.FromSeconds(2.5),
+                maxDuration:     TimeSpan.FromSeconds(30),
+                noSpeechTimeout: TimeSpan.FromSeconds(5));
+
+            IsRecording = false;
+
+            if (!string.IsNullOrWhiteSpace(text) && !IsNoiseTranscription(text))
+            {
+                // Keep conversation going — SendCoreAsync will handle TTS and loop back here
+                await SendCoreAsync(text);
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            Application.Current.Dispatcher.Invoke(() =>
+                SetStatus($"STT error: {ex.Message}", StatusKind.Error));
+        }
+        finally
+        {
+            IsRecording     = false;
+            IsPttProcessing = false;
+        }
+
+        // No speech detected — resume wake word listening
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            if (IsWakeWordActive)
+            {
+                _wakeWord?.StartListening();
+                SetStatus($"Listening for \"{_config.WakeWord}\"...");
+            }
+            else
+            {
+                SetStatus("Ready");
+            }
+        });
+    }
+
+    private void StopSpeaking()
+    {
+        _ttsCts?.Cancel();
+        _ttsCts?.Dispose();
+        _ttsCts = null;
+        _tts.Stop();
+        IsSpeaking = false;
+    }
+
     public void Dispose()
     {
         StopWakeWord();
+        StopSpeaking();
         _tts.Dispose();
     }
 }

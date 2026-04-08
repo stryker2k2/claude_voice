@@ -6,7 +6,7 @@ namespace claude_voice;
 public sealed class ChatMessage : INotifyPropertyChanged
 {
     public string Role        { get; init; } = "";
-    public string DisplayName => Role == "user" ? "You" : "Claude";
+    public string DisplayName { get; init; } = "";
     public bool   IsUser      => Role == "user";
 
     private string _text = "";

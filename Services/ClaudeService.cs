@@ -34,18 +34,55 @@ public sealed class ClaudeService
 
         var fullResponse = new StringBuilder();
 
-        await foreach (var streamEvent in _client.Messages.CreateStreaming(parameters).WithCancellation(ct))
+        try
         {
-            if (streamEvent.TryPickContentBlockDelta(out var delta) &&
-                delta.Delta.TryPickText(out var text))
+            await foreach (var streamEvent in _client.Messages.CreateStreaming(parameters).WithCancellation(ct))
             {
-                fullResponse.Append(text.Text);
-                onToken(text.Text);
+                if (streamEvent.TryPickContentBlockDelta(out var delta) &&
+                    delta.Delta.TryPickText(out var text))
+                {
+                    fullResponse.Append(text.Text);
+                    onToken(text.Text);
+                }
             }
-        }
 
-        _history.Add(new MessageParam { Role = Role.Assistant, Content = fullResponse.ToString() });
+            _history.Add(new MessageParam { Role = Role.Assistant, Content = fullResponse.ToString() });
+        }
+        catch (OperationCanceledException)
+        {
+            // Remove the dangling user message so history stays consistent
+            _history.RemoveAt(_history.Count - 1);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Remove the dangling user message so history stays consistent
+            _history.RemoveAt(_history.Count - 1);
+
+            // Surface a friendly message for content-policy blocks
+            if (ex.Message.Contains("content filtering", StringComparison.OrdinalIgnoreCase) ||
+                ex.Message.Contains("content filter",    StringComparison.OrdinalIgnoreCase) ||
+                ex.Message.Contains("Output blocked",    StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Claude declined to respond — that request was blocked by the content policy.", ex);
+            }
+
+            throw;
+        }
     }
 
     public void ClearHistory() => _history.Clear();
+
+    public void LoadHistory(IEnumerable<MemoryEntry> entries)
+    {
+        _history.Clear();
+        foreach (var e in entries)
+            _history.Add(new MessageParam
+            {
+                Role    = string.Equals(e.Role, "user", StringComparison.OrdinalIgnoreCase)
+                              ? Role.User : Role.Assistant,
+                Content = e.Content,
+            });
+    }
 }

@@ -25,12 +25,26 @@ public sealed class WakeWordService : IDisposable
         _engine.SetInputToDefaultAudioDevice();
     }
 
-    public void StartListening() => _engine.RecognizeAsync(RecognizeMode.Multiple);
+    private bool _isListening;
 
-    public void StopListening() => _engine.RecognizeAsyncStop();
+    public void StartListening()
+    {
+        if (_isListening) return;
+        _isListening = true;
+        _engine.RecognizeAsync(RecognizeMode.Multiple);
+    }
+
+    public void StopListening()
+    {
+        if (!_isListening) return;
+        _isListening = false;
+        _engine.RecognizeAsyncStop();
+    }
 
     private void OnSpeechRecognized(object? sender, SpeechRecognizedEventArgs e)
     {
+        // Ignore events that arrive after StopListening was called (SAPI5 buffers audio)
+        if (!_isListening) return;
         if (e.Result.Confidence >= 0.5f)
             WakeWordDetected?.Invoke(this, EventArgs.Empty);
     }

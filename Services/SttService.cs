@@ -94,10 +94,13 @@ public sealed class SttService : IDisposable
     /// <summary>
     /// Starts recording, waits for speech followed by silence, then transcribes.
     /// Used by the wake-word flow so the user doesn't need to press a button to stop.
+    /// <paramref name="noSpeechTimeout"/>: if no speech starts within this duration, stop early (returns "").
+    /// Pass <see cref="TimeSpan.Zero"/> to disable the no-speech timeout.
     /// </summary>
     public async Task<string> AutoRecordAndTranscribeAsync(
         TimeSpan silenceTimeout,
         TimeSpan maxDuration,
+        TimeSpan noSpeechTimeout = default,
         CancellationToken ct = default)
     {
         StartRecording();
@@ -122,6 +125,11 @@ public sealed class SttService : IDisposable
                 hadSpeech  = true;
                 lastSpeech = DateTime.UtcNow;
             }
+
+            // Give up if user hasn't started speaking within noSpeechTimeout
+            if (!hadSpeech && noSpeechTimeout > TimeSpan.Zero &&
+                DateTime.UtcNow - started > noSpeechTimeout)
+                break;
 
             if (hadSpeech && currentRms < SilenceThreshold &&
                 DateTime.UtcNow - lastSpeech > silenceTimeout)

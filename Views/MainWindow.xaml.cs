@@ -55,6 +55,26 @@ public partial class MainWindow : Window
     }
 
     // -------------------------------------------------------------------------
+    // Input box — Enter sends, Shift+Enter inserts newline
+
+    private void InputBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter || (Keyboard.Modifiers & ModifierKeys.Shift) != 0) return;
+        e.Handled = true;
+        if (_vm.SendCommand.CanExecute(null))
+            _vm.SendCommand.Execute(null);
+    }
+
+    // -------------------------------------------------------------------------
+    // Copy message to clipboard
+
+    private void CopyMessage_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.Button btn && btn.Tag is string text && text.Length > 0)
+            System.Windows.Clipboard.SetText(text);
+    }
+
+    // -------------------------------------------------------------------------
     // Settings — opens dialog, hands result back to VM
 
     private void SettingsButton_Click(object sender, RoutedEventArgs e)

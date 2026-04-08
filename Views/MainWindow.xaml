@@ -46,14 +46,37 @@
                                             </Style.Triggers>
                                         </Style>
                                     </Border.Style>
-                                    <StackPanel>
-                                        <TextBlock Text="{Binding DisplayName}"
-                                                   FontFamily="Segoe UI" FontSize="11" FontWeight="SemiBold"
-                                                   Foreground="#9CDCFE" Margin="0,0,0,3"/>
-                                        <TextBlock Text="{Binding Text}"
-                                                   FontFamily="Segoe UI" FontSize="14"
-                                                   Foreground="#D4D4D4" TextWrapping="Wrap"/>
-                                    </StackPanel>
+                                    <Grid>
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding DisplayName}"
+                                                       FontFamily="Segoe UI" FontSize="11" FontWeight="SemiBold"
+                                                       Foreground="#9CDCFE" Margin="0,0,0,3"/>
+                                            <TextBlock Text="{Binding Text}"
+                                                       FontFamily="Segoe UI" FontSize="14"
+                                                       Foreground="#D4D4D4" TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <!-- Copy button — visible on bubble hover -->
+                                        <Button Content="&#xE8C8;"
+                                                VerticalAlignment="Top" HorizontalAlignment="Right"
+                                                Width="22" Height="22" Padding="0"
+                                                FontFamily="Segoe MDL2 Assets" FontSize="12"
+                                                Background="Transparent" BorderThickness="0"
+                                                Foreground="#888888" Cursor="Hand"
+                                                ToolTip="Copy to clipboard"
+                                                Tag="{Binding Text}"
+                                                Click="CopyMessage_Click">
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Border}}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                    </Grid>
                                 </Border>
                             </Grid>
                         </DataTemplate>
@@ -91,12 +114,14 @@
                          FontFamily="Segoe UI" FontSize="14"
                          TextWrapping="Wrap" AcceptsReturn="True"
                          VerticalScrollBarVisibility="Auto"
-                         Padding="8" VerticalContentAlignment="Top"/>
+                         Padding="8" VerticalContentAlignment="Top"
+                         PreviewKeyDown="InputBox_KeyDown"/>
 
                 <!-- Action bar -->
                 <Grid Grid.Row="2" Margin="0,8,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
@@ -141,8 +166,29 @@
                         </Button.Style>
                     </Button>
 
+                    <!-- Stop speaking -->
+                    <Button Grid.Column="3"
+                            Content="&#xE71A;" Width="34" Height="34" Margin="0,0,8,0"
+                            Foreground="#D4D4D4" BorderBrush="#555555" BorderThickness="1"
+                            FontFamily="Segoe MDL2 Assets" FontSize="14"
+                            Cursor="Hand" ToolTip="Stop speaking"
+                            Command="{Binding StopSpeakingCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                <Setter Property="Background" Value="#3C3C3C"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsSpeaking}" Value="True">
+                                        <Setter Property="Background"   Value="#8B1A1A"/>
+                                        <Setter Property="BorderBrush"  Value="#E05252"/>
+                                        <Setter Property="Foreground"   Value="White"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+
                     <!-- PTT -->
-                    <Button Grid.Column="3" x:Name="PttButton"
+                    <Button Grid.Column="4" x:Name="PttButton"
                             Content="&#x1F3A4;  Hold to Talk"
                             Width="140" Height="34" Margin="0,0,8,0"
                             Foreground="#D4D4D4" BorderBrush="#555555" BorderThickness="1"
@@ -164,7 +210,7 @@
                     </Button>
 
                     <!-- Send -->
-                    <Button Grid.Column="4"
+                    <Button Grid.Column="5"
                             Content="Send" Width="80" Height="34"
                             Background="#0E639C" Foreground="White"
                             BorderThickness="0" FontFamily="Segoe UI"
