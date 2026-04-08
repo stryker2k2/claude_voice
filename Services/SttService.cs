@@ -175,8 +175,8 @@ public sealed class SttService : IDisposable
                 if (hadSpeech && currentRms < SilenceThreshold &&
                     DateTime.UtcNow - lastSpeech > silenceTimeout)
                 {
-                    System.IO.File.AppendAllText("stt_debug.log",
-                        $"{DateTime.Now:HH:mm:ss} [STT] Silence detected — RMS: {currentRms:F1}, silent for: {(DateTime.UtcNow - lastSpeech).TotalSeconds:F1}s{Environment.NewLine}");
+                    // System.IO.File.AppendAllText("stt_debug.log",
+                    //     $"{DateTime.Now:HH:mm:ss} [STT] Silence detected — RMS: {currentRms:F1}, silent for: {(DateTime.UtcNow - lastSpeech).TotalSeconds:F1}s{Environment.NewLine}");
                     break;
                 }
             }
