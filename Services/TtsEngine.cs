@@ -27,6 +27,7 @@ public sealed class TtsEngine : IDisposable
     // Active playback — held so Stop() can cancel mid-sentence
     private WaveOutEvent? _waveOut;
     private readonly object _waveOutLock = new();
+    private bool _isFirstChunk = true;
 
     // -------------------------------------------------------------------------
     // Shared
@@ -66,6 +67,9 @@ public sealed class TtsEngine : IDisposable
     /// <summary>Swaps the Piper voice model at runtime.</summary>
     public void ChangeVoice(string modelPath) => _piperModel = modelPath;
 
+    /// <summary>Call before each new response so the first chunk gets the device warm-up silence.</summary>
+    public void PrepareForNewResponse() => _isFirstChunk = true;
+
     /// <summary>Immediately stops any audio currently playing.</summary>
     public void Stop()
     {
@@ -77,62 +81,73 @@ public sealed class TtsEngine : IDisposable
         SpeechSynthesizer.AllVoices;
 
     /// <summary>
-    /// Synthesizes <paramref name="text"/> and plays it synchronously.
+    /// Synthesizes <paramref name="text"/> to a temporary WAV file and returns its path.
+    /// Returns null if the text is empty after normalization. Caller must delete the file.
     /// </summary>
-    public async Task SpeakAsync(string text, CancellationToken ct = default)
+    public async Task<string?> SynthesizeAsync(string text, CancellationToken ct = default)
     {
         if (_usePiper)
-            await SpeakWithPiperAsync(text, ct);
+            return await SynthesizePiperAsync(text, ct);
         else
-            await SpeakWithWinRtAsync(text, ct);
+            return await SynthesizeWinRtAsync(text, ct);
+    }
+
+    /// <summary>Plays a pre-synthesized WAV file and deletes it when done.</summary>
+    public async Task PlayPrerenderedAsync(string wavFile, CancellationToken ct = default)
+    {
+        try   { await PlayWavAsync(wavFile, ct); }
+        finally { try { File.Delete(wavFile); } catch { /* best-effort */ } }
+    }
+
+    /// <summary>Synthesizes and plays in one call (used by WinRT path and as fallback).</summary>
+    public async Task SpeakAsync(string text, CancellationToken ct = default)
+    {
+        var wav = await SynthesizeAsync(text, ct);
+        if (wav != null) await PlayPrerenderedAsync(wav, ct);
     }
 
     // -------------------------------------------------------------------------
     // Piper backend
 
-    private async Task SpeakWithPiperAsync(string text, CancellationToken ct)
+    private async Task<string?> SynthesizePiperAsync(string text, CancellationToken ct)
     {
         text = NormalizeForSpeech(text);
-        if (string.IsNullOrWhiteSpace(text)) return;
+        if (string.IsNullOrWhiteSpace(text)) return null;
 
         var tmpFile = Path.Combine(Path.GetTempPath(), $"claude_voice_tts_{Guid.NewGuid():N}.wav");
-        try
+        var psi = new ProcessStartInfo
         {
-            var psi = new ProcessStartInfo
-            {
-                FileName               = _piperExe,
-                Arguments              = $"--model \"{_piperModel}\" --output_file \"{tmpFile}\" --length-scale {_piperLengthScale:F4}",
-                UseShellExecute        = false,
-                RedirectStandardInput  = true,
-                RedirectStandardError  = true,
-                CreateNoWindow         = true
-            };
+            FileName               = _piperExe,
+            Arguments              = $"--model \"{_piperModel}\" --output_file \"{tmpFile}\" --length-scale {_piperLengthScale:F4}",
+            UseShellExecute        = false,
+            RedirectStandardInput  = true,
+            RedirectStandardError  = true,
+            CreateNoWindow         = true
+        };
 
-            using var proc = Process.Start(psi)
-                ?? throw new InvalidOperationException("Failed to start piper.exe");
+        using var proc = Process.Start(psi)
+            ?? throw new InvalidOperationException("Failed to start piper.exe");
 
-            await proc.StandardInput.WriteAsync(text);
-            proc.StandardInput.Close();
+        await proc.StandardInput.WriteAsync(text);
+        proc.StandardInput.Close();
 
-            var stderrTask = proc.StandardError.ReadToEndAsync(ct);
-            await proc.WaitForExitAsync(ct);
-            await stderrTask;
+        var stderrTask = proc.StandardError.ReadToEndAsync(ct);
+        await proc.WaitForExitAsync(ct);
+        await stderrTask;
 
-            if (proc.ExitCode != 0)
-                throw new InvalidOperationException($"piper.exe exited with code {proc.ExitCode}");
-
-            await PlayWavAsync(tmpFile, ct);
-        }
-        finally
+        if (proc.ExitCode != 0)
         {
             try { File.Delete(tmpFile); } catch { /* best-effort */ }
+            throw new InvalidOperationException($"piper.exe exited with code {proc.ExitCode}");
         }
+
+        return tmpFile;
     }
 
     // -------------------------------------------------------------------------
     // WinRT backend
 
-    private async Task SpeakWithWinRtAsync(string text, CancellationToken ct)
+    private async Task<string?> SynthesizeWinRtAsync(string text, CancellationToken ct)
     {
         var stream = await _synth.SynthesizeTextToStreamAsync(text);
 
@@ -143,15 +158,8 @@ public sealed class TtsEngine : IDisposable
         dataReader.ReadBytes(bytes);
 
         var tmpFile = Path.Combine(Path.GetTempPath(), $"claude_voice_tts_{Guid.NewGuid():N}.wav");
-        try
-        {
-            await File.WriteAllBytesAsync(tmpFile, bytes, ct);
-            await PlayWavAsync(tmpFile, ct);
-        }
-        finally
-        {
-            try { File.Delete(tmpFile); } catch { /* best-effort */ }
-        }
+        await File.WriteAllBytesAsync(tmpFile, bytes, ct);
+        return tmpFile;
     }
 
     // -------------------------------------------------------------------------
@@ -159,9 +167,9 @@ public sealed class TtsEngine : IDisposable
 
     private async Task PlayWavAsync(string wavFile, CancellationToken ct)
     {
-        // Prepend 200 ms of PCM silence directly into the WAV bytes so the
-        // audio device warms up before speech starts (avoids first-word clipping).
-        PrependSilence(wavFile, milliseconds: 200);
+        // Prepend silence only on the first chunk of each response so the audio
+        // device warms up without adding gaps between subsequent chunks.
+        if (_isFirstChunk) { PrependSilence(wavFile, milliseconds: 150); _isFirstChunk = false; }
 
         using var reader  = new AudioFileReader(wavFile);
         using var waveOut = new WaveOutEvent();
@@ -250,7 +258,19 @@ public sealed class TtsEngine : IDisposable
         text = text.Replace("(", ", ").Replace(")", ", ");
         text = System.Text.RegularExpressions.Regex.Replace(text, @"\.[/\\]", " ");
         text = System.Text.RegularExpressions.Regex.Replace(text, @"(\w)\.(\w)", "$1 $2");
-        text = System.Text.RegularExpressions.Regex.Replace(text, @"\r?\n", ", , ");
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"(\r?\n\s*)+", " ");        // all newlines → single space
+
+        // Insert commas before conjunctions when a clause runs 70+ chars without
+        // punctuation. This gives Piper natural prosodic pause points in long sentences
+        // (e.g. quoting speeches), preventing speed-up or garbling.
+        {
+            var clauseBreak = new System.Text.RegularExpressions.Regex(
+                @"(?<=[^.,;!?:]{70,}) \b(where|which|who|because|when|while|though|although|and|but|or)\b",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            string prev;
+            do { prev = text; text = clauseBreak.Replace(text, m => ", " + m.Value.TrimStart()); }
+            while (text != prev);
+        }
 
         var sb = new System.Text.StringBuilder(text.Length);
         foreach (char c in text)

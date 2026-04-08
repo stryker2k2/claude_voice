@@ -12,6 +12,7 @@
             <Setter Property="Width"      Value="6"/>
             <Setter Property="Background" Value="Transparent"/>
         </Style>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
     </Window.Resources>
 
     <Grid>
@@ -33,6 +34,25 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Grid Margin="4,3">
+
+                                <!-- System note — centred dim italic, no bubble -->
+                                <TextBlock Text="{Binding Text}"
+                                           HorizontalAlignment="Center"
+                                           Foreground="#555555" FontFamily="Segoe UI"
+                                           FontSize="11" FontStyle="Italic"
+                                           TextWrapping="Wrap" Margin="0,2">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsSystem}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+
                                 <Border CornerRadius="8" Padding="10,7" MaxWidth="680">
                                     <Border.Style>
                                         <Style TargetType="Border">
@@ -42,6 +62,9 @@
                                                 <DataTrigger Binding="{Binding IsUser}" Value="True">
                                                     <Setter Property="Background"          Value="#0E4C78"/>
                                                     <Setter Property="HorizontalAlignment" Value="Right"/>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding IsSystem}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
@@ -101,6 +124,7 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <TextBlock Grid.Row="0" Text="You"
@@ -117,8 +141,41 @@
                          Padding="8" VerticalContentAlignment="Top"
                          PreviewKeyDown="InputBox_KeyDown"/>
 
+                <!-- Volume meter -->
+                <Grid Grid.Row="2" Margin="0,8,0,0"
+                      Visibility="{Binding IsPttEnabled, Converter={StaticResource BoolToVis}}">
+                <ProgressBar
+                             Value="{Binding MicLevel, Mode=OneWay}"
+                             Minimum="0" Maximum="1"
+                             Height="18">
+                    <ProgressBar.Template>
+                        <ControlTemplate TargetType="ProgressBar">
+                            <Border Background="#111111" CornerRadius="3">
+                                <Grid>
+                                    <Rectangle x:Name="PART_Track" Fill="Transparent"/>
+                                    <Border x:Name="PART_Indicator" HorizontalAlignment="Left" CornerRadius="3">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                                                <GradientStop Color="#1A5C2A" Offset="0.0"/>
+                                                <GradientStop Color="#27AE60" Offset="0.55"/>
+                                                <GradientStop Color="#F39C12" Offset="0.78"/>
+                                                <GradientStop Color="#E74C3C" Offset="1.0"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </ControlTemplate>
+                    </ProgressBar.Template>
+                </ProgressBar>
+                <TextBlock Text="{Binding MicDb, StringFormat='{}{0:F1} dB'}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           FontFamily="Segoe UI" FontSize="10"
+                           Foreground="White" IsHitTestVisible="False"/>
+                </Grid>
+
                 <!-- Action bar -->
-                <Grid Grid.Row="2" Margin="0,8,0,0">
+                <Grid Grid.Row="3" Margin="0,8,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>

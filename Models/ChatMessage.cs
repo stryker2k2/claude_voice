@@ -8,6 +8,7 @@ public sealed class ChatMessage : INotifyPropertyChanged
     public string Role        { get; init; } = "";
     public string DisplayName { get; init; } = "";
     public bool   IsUser      => Role == "user";
+    public bool   IsSystem    => Role == "system";
 
     private string _text = "";
     public string Text

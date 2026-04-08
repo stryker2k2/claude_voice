@@ -18,6 +18,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private          string?       _initWarning;
     private          WakeWordService? _wakeWord;
     private          CancellationTokenSource? _ttsCts;
+    private          CancellationTokenSource? _autoRecordCts;
     private readonly MemoryService _memory = new();
     private readonly List<MemoryEntry> _memoryEntries = [];
 
@@ -32,6 +33,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private bool   _isWakeWordActive;
     private bool   _isSpeaking;
     private string _userInputText = "";
+    private double _micLevel;
+    private double _micDb;
 
     public ObservableCollection<ChatMessage> Messages { get; } = [];
 
@@ -56,6 +59,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         get => _userInputText;
         set => SetField(ref _userInputText, value);
     }
+
+    public double MicLevel { get => _micLevel; private set => SetField(ref _micLevel, value); }
+    public double MicDb    { get => _micDb;    private set => SetField(ref _micDb, value); }
 
     // -------------------------------------------------------------------------
     // PTT key (read by View for keyboard handling)
@@ -101,6 +107,25 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
         try { _stt = new SttService(ResolveModelPath(_config.WhisperModel)); }
         catch (FileNotFoundException ex) { _initWarning = ex.Message; }
+
+        if (_stt is not null)
+        {
+            int _meterTick = 0;
+            var meterTimer = new System.Windows.Threading.DispatcherTimer
+                { Interval = TimeSpan.FromMilliseconds(50) };
+            meterTimer.Tick += (_, _) =>
+            {
+                var rms = _stt.CurrentRms;
+                const double FloorDb = -60.0;
+                var db  = rms > 1.0 ? 20.0 * Math.Log10(rms / 32767.0) : -100.0;
+                // Update readable dBFS number at ~300 ms so it's catchable by eye
+                if (++_meterTick % 6 == 0) MicDb = Math.Max(db, FloorDb);
+                var raw = Math.Clamp((db - FloorDb) / (-FloorDb), 0.0, 1.0);
+                // Fast attack, slow decay — bar snaps up instantly, falls gradually
+                MicLevel = raw > MicLevel ? raw : MicLevel * 0.75;
+            };
+            meterTimer.Start();
+        }
 
         SendCommand           = new AsyncRelayCommand(SendAsync,    () => !IsBusy);
         StartPttCommand       = new RelayCommand(StartPtt,          () => CanPtt);
@@ -184,6 +209,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     private void StopWakeWord()
     {
+        // If auto-recording is in progress, cancel it immediately (no transcription)
+        _autoRecordCts?.Cancel();
+
         _wakeWord?.StopListening();
         _wakeWord?.Dispose();
         _wakeWord = null;
@@ -205,13 +233,20 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         IsPttProcessing = true;
         SetStatus("Recording...", StatusKind.Busy);
 
+        _autoRecordCts?.Dispose();
+        _autoRecordCts = new CancellationTokenSource();
+
         try
         {
-            var text = await _stt.AutoRecordAndTranscribeAsync(
-                silenceTimeout: TimeSpan.FromSeconds(2.5),
-                maxDuration:    TimeSpan.FromSeconds(30));
+            var (text, hitMax) = await _stt.AutoRecordAndTranscribeAsync(
+                silenceTimeout:   TimeSpan.FromSeconds(_config.SilenceTimeout),
+                maxDuration:      TimeSpan.FromSeconds(60),
+                silenceThreshold: DbFsToRms(_config.VoiceThresholdDb),
+                noSpeechTimeout:  TimeSpan.FromSeconds(10),
+                ct:               _autoRecordCts.Token);
 
             SetStatus("Transcribing...", StatusKind.Busy);
+            if (hitMax) AddSystemNote("— recording limit reached, message sent —");
 
             if (!string.IsNullOrWhiteSpace(text) && !IsNoiseTranscription(text))
                 await SendCoreAsync(text);
@@ -267,18 +302,42 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _ttsCts = new CancellationTokenSource();
         var ttsCts = _ttsCts;
         IsSpeaking = true;
+        _tts.PrepareForNewResponse();
         SetStatus("Talking...", StatusKind.Busy);
         if (IsWakeWordActive) _wakeWord?.StopListening();
 
         _ = Task.Run(async () =>
         {
+            // Two-stage pipeline: synthesize chunk N+1 while chunk N is playing.
+            // A bounded channel of 1 means synthesis stays exactly one chunk ahead.
+            var wavChannel = Channel.CreateBounded<string>(
+                new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.Wait });
+
+            var synthTask = Task.Run(async () =>
+            {
+                try
+                {
+                    await foreach (var sentence in sentenceChannel.Reader.ReadAllAsync(ttsCts.Token))
+                    {
+                        var wav = await _tts.SynthesizeAsync(sentence, ttsCts.Token);
+                        if (wav != null) await wavChannel.Writer.WriteAsync(wav, ttsCts.Token);
+                    }
+                }
+                catch (OperationCanceledException) { }
+                finally { wavChannel.Writer.TryComplete(); }
+            }, CancellationToken.None);
+
             try
             {
-                await foreach (var sentence in sentenceChannel.Reader.ReadAllAsync(ttsCts.Token))
-                    await _tts.SpeakAsync(sentence, ttsCts.Token);
+                await foreach (var wav in wavChannel.Reader.ReadAllAsync(ttsCts.Token))
+                    await _tts.PlayPrerenderedAsync(wav, ttsCts.Token);
             }
             catch (OperationCanceledException) { }
-            finally { await ResumeAfterSpeakingAsync(); }
+            finally
+            {
+                await synthTask;
+                await ResumeAfterSpeakingAsync();
+            }
         }, CancellationToken.None);
 
         try
@@ -321,7 +380,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             // Only overwrite the bubble if nothing was generated yet.
             // If content was already streaming (and TTS is speaking it), leave it intact.
             if (sb.Length == 0)
-                Application.Current.Dispatcher.Invoke(() => assistantMsg.Text = $"Error: {ex.Message}");
+                Application.Current.Dispatcher.Invoke(() => assistantMsg.Text = FriendlyErrorMessage(ex));
             SetStatus($"Error: {ErrorLabel(ex)}", StatusKind.Error);
         }
         finally
@@ -346,7 +405,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     /// </summary>
     private static void FlushSentences(StringBuilder buffer, ChannelWriter<string> writer)
     {
-        const int MinTtsChunkChars = 200;
+        const int MinTtsChunkChars = 400;
 
         var text  = buffer.ToString();
         int start = 0;
@@ -358,9 +417,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
             bool isSentenceEnd = (c is '.' or '!' or '?') &&
                                  (char.IsWhiteSpace(next) || next is '\r' or '\n');
-            bool isParagraph   = c == '\n' && next == '\n';
 
-            if (!isSentenceEnd && !isParagraph) continue;
+            if (!isSentenceEnd) continue;
 
             // Skip whitespace after the break point
             int skip = i + 1;
@@ -368,8 +426,9 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
             var candidate = text[start..skip].Trim();
 
-            // Emit only if we've accumulated enough text, or hit a paragraph break
-            if (candidate.Length >= MinTtsChunkChars || isParagraph)
+            // Emit only once enough text has accumulated — paragraph breaks no longer
+            // force early emission so short paragraphs flow together into one chunk.
+            if (candidate.Length >= MinTtsChunkChars)
             {
                 if (!string.IsNullOrWhiteSpace(candidate))
                     writer.TryWrite(candidate);
@@ -394,7 +453,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         return new SettingsViewModel(
             _claude.SystemPrompt, voices, currentModel,
             _config.PttKey ?? "F5", _config.WakeWord, _config.AssistantName,
-            _config.EnableMemory,
+            _config.EnableMemory, _config.SilenceTimeout, _config.VoiceThresholdDb,
             wipeMemoryAction: () =>
             {
                 _memory.Wipe();
@@ -430,6 +489,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             SystemPrompt    = vm.SystemPrompt,
             AssistantName   = vm.AssistantName,
             EnableMemory    = vm.EnableMemory,
+            SilenceTimeout    = vm.SilenceTimeout,
+            VoiceThresholdDb  = vm.VoiceThresholdDb,
         };
         AppConfig.Save(_config);
 
@@ -453,10 +514,23 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private static bool IsNoiseTranscription(string text) =>
         System.Text.RegularExpressions.Regex.IsMatch(text.Trim(), @"^[\[\(].*[\]\)]$");
 
+    /// <summary>Returns a human-friendly message for display in the chat bubble.</summary>
+    private static string FriendlyErrorMessage(Exception ex)
+    {
+        var msg = ex.Message;
+        if (msg.Contains("credit balance", StringComparison.OrdinalIgnoreCase) ||
+            msg.Contains("too low to access", StringComparison.OrdinalIgnoreCase))
+            return "I'm not able to respond right now — the API credit balance is too low. Please visit Anthropic's Plans & Billing to add credits.";
+        return $"Error: {ex.Message}";
+    }
+
     /// <summary>Returns a short label for display in the status bar.</summary>
     private static string ErrorLabel(Exception ex)
     {
         var msg = ex.Message;
+        if (msg.Contains("credit balance", StringComparison.OrdinalIgnoreCase) ||
+            msg.Contains("too low to access", StringComparison.OrdinalIgnoreCase))
+            return "Out of Credits";
         if (msg.Contains("Output blocked",    StringComparison.OrdinalIgnoreCase) ||
             msg.Contains("content filter",    StringComparison.OrdinalIgnoreCase) ||
             msg.Contains("content filtering", StringComparison.OrdinalIgnoreCase) ||
@@ -482,6 +556,15 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     }
 
     private enum StatusKind { Ready, Busy, Error }
+
+    private static double DbFsToRms(double dBFS) => 32767.0 * Math.Pow(10.0, dBFS / 20.0);
+
+    private void AddSystemNote(string text) =>
+        Application.Current.Dispatcher.Invoke(() =>
+        {
+            Messages.Add(new ChatMessage { Role = "system", Text = text });
+            ScrollRequested?.Invoke(this, EventArgs.Empty);
+        });
 
     private void SetStatus(string text, StatusKind kind = StatusKind.Ready)
     {
@@ -551,7 +634,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
         if (!IsWakeWordActive)
         {
-            Application.Current.Dispatcher.Invoke(() => SetStatus("Ready"));
+            Application.Current.Dispatcher.Invoke(() => { if (_statusBrush != _errorBrush) SetStatus("Ready"); });
             return;
         }
 
@@ -570,13 +653,20 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         IsPttProcessing = true;
         Application.Current.Dispatcher.Invoke(() => SetStatus("Your turn...", StatusKind.Ready));
 
+        _autoRecordCts?.Dispose();
+        _autoRecordCts = new CancellationTokenSource();
+
         string text = "";
         try
         {
-            text = await _stt.AutoRecordAndTranscribeAsync(
-                silenceTimeout:  TimeSpan.FromSeconds(2.5),
-                maxDuration:     TimeSpan.FromSeconds(30),
-                noSpeechTimeout: TimeSpan.FromSeconds(5));
+            (text, var hitMax) = await _stt.AutoRecordAndTranscribeAsync(
+                silenceTimeout:   TimeSpan.FromSeconds(_config.SilenceTimeout),
+                maxDuration:      TimeSpan.FromSeconds(60),
+                silenceThreshold: DbFsToRms(_config.VoiceThresholdDb),
+                noSpeechTimeout:  TimeSpan.FromSeconds(5),
+                ct:               _autoRecordCts.Token);
+
+            if (hitMax) AddSystemNote("— recording limit reached, message sent —");
 
             if (!string.IsNullOrWhiteSpace(text) && !IsNoiseTranscription(text))
             {
@@ -603,7 +693,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 _wakeWord?.StartListening();
                 SetStatus($"Listening for \"{_config.WakeWord}\"...");
             }
-            else
+            else if (_statusBrush != _errorBrush)
             {
                 SetStatus("Ready");
             }
@@ -623,6 +713,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     {
         StopWakeWord();
         StopSpeaking();
+        _autoRecordCts?.Dispose();
         _tts.Dispose();
     }
 }

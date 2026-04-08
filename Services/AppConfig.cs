@@ -27,6 +27,13 @@ public sealed class AppConfig
     // Whether to persist conversation history between sessions
     public bool EnableMemory { get; init; } = true;
 
+    // How long (seconds) of silence triggers end-of-speech detection
+    public double SilenceTimeout { get; init; } = 4.0;
+
+    // Voice detection threshold in dBFS (0 = max, -60 = very quiet). Set between your
+    // ambient noise floor and your speech level. Typical speech: -10 dBFS, noise: -40 dBFS.
+    public double VoiceThresholdDb { get; init; } = -30.0;
+
     // Claude system prompt
     public string SystemPrompt { get; init; } =
         "You are a helpful voice assistant. Keep responses conversational and concise — they will be spoken aloud.";

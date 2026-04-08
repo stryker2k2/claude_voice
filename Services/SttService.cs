@@ -13,7 +13,11 @@ public sealed class SttService : IDisposable
     private string          _tempFile = "";
     private long _lastRmsBits; // stores double bits via Interlocked for thread safety
 
-    public bool IsRecording { get; private set; }
+    public bool   IsRecording { get; private set; }
+    public double CurrentRms  =>
+        _waveIn is not null
+            ? BitConverter.Int64BitsToDouble(Interlocked.Read(ref _lastRmsBits))
+            : 0.0;
 
     public SttService(string modelPath)
     {
@@ -97,46 +101,95 @@ public sealed class SttService : IDisposable
     /// <paramref name="noSpeechTimeout"/>: if no speech starts within this duration, stop early (returns "").
     /// Pass <see cref="TimeSpan.Zero"/> to disable the no-speech timeout.
     /// </summary>
-    public async Task<string> AutoRecordAndTranscribeAsync(
+    /// <summary>
+    /// Returns the transcribed text and whether recording was cut off by
+    /// <paramref name="maxDuration"/> (as opposed to natural silence or no-speech timeout).
+    /// </summary>
+    /// <summary>
+    /// Immediately stops recording and discards all audio — no transcription is performed.
+    /// Used when the user cancels a wake-word recording session.
+    /// </summary>
+    public void StopRecordingOnly()
+    {
+        if (!IsRecording) return;
+        IsRecording = false;
+
+        _waveIn?.StopRecording();
+        _waveIn?.Dispose();
+        _waveIn = null;
+
+        _waveWriter?.Dispose();
+        _waveWriter = null;
+
+        try { if (!string.IsNullOrEmpty(_tempFile)) File.Delete(_tempFile); } catch { /* best-effort */ }
+        _tempFile = "";
+
+        Interlocked.Exchange(ref _lastRmsBits, 0);
+    }
+
+    public async Task<(string Text, bool HitMaxDuration)> AutoRecordAndTranscribeAsync(
         TimeSpan silenceTimeout,
         TimeSpan maxDuration,
-        TimeSpan noSpeechTimeout = default,
-        CancellationToken ct = default)
+        double   silenceThreshold  = 150.0,
+        TimeSpan noSpeechTimeout   = default,
+        CancellationToken ct       = default)
     {
         StartRecording();
 
-        const double SpeechThreshold  = 600.0;   // RMS above this = speech
-        const double SilenceThreshold = 300.0;   // RMS below this = silence
+        double SpeechThreshold  = silenceThreshold;
+        double SilenceThreshold = silenceThreshold;
 
-        var started    = DateTime.UtcNow;
-        var lastSpeech = DateTime.UtcNow;
-        bool hadSpeech = false;
+        var started         = DateTime.UtcNow;
+        var lastSpeech      = DateTime.UtcNow;
+        bool hadSpeech      = false;
+        bool hitMaxDuration = false;
 
-        while (!ct.IsCancellationRequested)
+        try
         {
-            await Task.Delay(100, ct);
-
-            if (DateTime.UtcNow - started > maxDuration) break;
-
-            var currentRms = BitConverter.Int64BitsToDouble(Interlocked.Read(ref _lastRmsBits));
-
-            if (currentRms > SpeechThreshold)
+            while (!ct.IsCancellationRequested)
             {
-                hadSpeech  = true;
-                lastSpeech = DateTime.UtcNow;
+                await Task.Delay(100, ct);
+
+                if (DateTime.UtcNow - started > maxDuration)
+                {
+                    hitMaxDuration = true;
+                    break;
+                }
+
+                var currentRms = BitConverter.Int64BitsToDouble(Interlocked.Read(ref _lastRmsBits));
+
+                if (currentRms > SpeechThreshold)
+                    hadSpeech = true;
+
+                // Keep lastSpeech alive as long as we're above the silence floor —
+                // not just on loud spikes. This prevents cutting off mid-sentence
+                // when a low-gain mic stays between the two thresholds.
+                if (hadSpeech && currentRms > SilenceThreshold)
+                    lastSpeech = DateTime.UtcNow;
+
+                // Give up if user hasn't started speaking within noSpeechTimeout
+                if (!hadSpeech && noSpeechTimeout > TimeSpan.Zero &&
+                    DateTime.UtcNow - started > noSpeechTimeout)
+                    break;
+
+                if (hadSpeech && currentRms < SilenceThreshold &&
+                    DateTime.UtcNow - lastSpeech > silenceTimeout)
+                {
+                    System.IO.File.AppendAllText("stt_debug.log",
+                        $"{DateTime.Now:HH:mm:ss} [STT] Silence detected — RMS: {currentRms:F1}, silent for: {(DateTime.UtcNow - lastSpeech).TotalSeconds:F1}s{Environment.NewLine}");
+                    break;
+                }
             }
 
-            // Give up if user hasn't started speaking within noSpeechTimeout
-            if (!hadSpeech && noSpeechTimeout > TimeSpan.Zero &&
-                DateTime.UtcNow - started > noSpeechTimeout)
-                break;
-
-            if (hadSpeech && currentRms < SilenceThreshold &&
-                DateTime.UtcNow - lastSpeech > silenceTimeout)
-                break;
+            // Normal exit — transcribe what was recorded
+            return (await StopAndTranscribeAsync(CancellationToken.None), hitMaxDuration);
         }
-
-        return await StopAndTranscribeAsync(ct);
+        catch (OperationCanceledException)
+        {
+            // Cancelled by the user (e.g. wake-word toggle off) — discard audio
+            StopRecordingOnly();
+            return ("", false);
+        }
     }
 
     public void Dispose()
