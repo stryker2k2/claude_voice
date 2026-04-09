@@ -20,15 +20,6 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
@@ -58,142 +49,129 @@
                        ToolTip="{Binding ConfigPath}"/>
         </StackPanel>
 
-        <!-- Voice label -->
-        <TextBlock Grid.Row="3" Text="Voice"
-                   Foreground="#D4D4D4" FontFamily="Segoe UI"
-                   FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
-
-        <!-- Voice dropdown -->
-        <ComboBox Grid.Row="4"
-                  Style="{StaticResource DarkComboBox}"
-                  ItemContainerStyle="{StaticResource DarkComboBoxItem}"
-                  ItemsSource="{Binding AvailableVoices}"
-                  SelectedItem="{Binding SelectedVoice}"
-                  Margin="0,0,0,14">
-            <ComboBox.ItemTemplate>
-                <DataTemplate>
-                    <TextBlock Text="{Binding DisplayName}"/>
-                </DataTemplate>
-            </ComboBox.ItemTemplate>
-        </ComboBox>
-
-        <!-- PTT key label -->
-        <TextBlock Grid.Row="5" Text="Push-to-Talk Key"
-                   Foreground="#D4D4D4" FontFamily="Segoe UI"
-                   FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
-
-        <!-- PTT key capture box -->
-        <Grid Grid.Row="6" Margin="0,0,0,14">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="120"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-            <TextBox Grid.Column="0"
-                     x:Name="PttKeyBox"
-                     Text="{Binding PttKey, Mode=OneWay}"
-                     IsReadOnly="True"
-                     Background="#252526" Foreground="#D4D4D4" CaretBrush="#D4D4D4"
-                     BorderBrush="#3C3C3C" BorderThickness="1"
-                     FontFamily="Segoe UI" FontSize="13"
-                     Padding="8,6" TextAlignment="Center"
-                     Cursor="Hand" ToolTip="Click then press any key"
-                     PreviewKeyDown="PttKeyBox_PreviewKeyDown"/>
-            <TextBlock Grid.Column="1"
-                       Text="  Click the box, then press any key"
-                       Foreground="#666666" FontFamily="Segoe UI" FontSize="11"
-                       VerticalAlignment="Center"/>
-        </Grid>
-
-        <!-- Wake word label -->
-        <TextBlock Grid.Row="7" Text="Wake Word"
-                   Foreground="#D4D4D4" FontFamily="Segoe UI"
-                   FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
-
-        <!-- Wake word input -->
-        <Grid Grid.Row="8" Margin="0,0,0,14">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="200"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-            <TextBox Grid.Column="0"
-                     Text="{Binding WakeWord, UpdateSourceTrigger=PropertyChanged}"
-                     Background="#252526" Foreground="#D4D4D4" CaretBrush="#D4D4D4"
-                     BorderBrush="#3C3C3C" BorderThickness="1"
-                     FontFamily="Segoe UI" FontSize="13"
-                     Padding="8,6"/>
-            <TextBlock Grid.Column="1"
-                       Text="  e.g. &quot;hey claude&quot;"
-                       Foreground="#666666" FontFamily="Segoe UI" FontSize="11"
-                       VerticalAlignment="Center"/>
-        </Grid>
-
-        <!-- Assistant name label -->
-        <TextBlock Grid.Row="9" Text="Assistant Name"
-                   Foreground="#D4D4D4" FontFamily="Segoe UI"
-                   FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
-
-        <!-- Assistant name input -->
-        <Grid Grid.Row="10" Margin="0,0,0,14">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="200"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-            <TextBox Grid.Column="0"
-                     Text="{Binding AssistantName, UpdateSourceTrigger=PropertyChanged}"
-                     Background="#252526" Foreground="#D4D4D4" CaretBrush="#D4D4D4"
-                     BorderBrush="#3C3C3C" BorderThickness="1"
-                     FontFamily="Segoe UI" FontSize="13"
-                     Padding="8,6"/>
-            <TextBlock Grid.Column="1"
-                       Text="  shown in chat bubbles"
-                       Foreground="#666666" FontFamily="Segoe UI" FontSize="11"
-                       VerticalAlignment="Center"/>
-        </Grid>
-
-        <!-- Memory label -->
-        <TextBlock Grid.Row="11" Text="Memory"
-                   Foreground="#D4D4D4" FontFamily="Segoe UI"
-                   FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
-
-        <!-- Memory controls -->
-        <Grid Grid.Row="12" Margin="0,0,0,14">
+        <!-- 2x3 grid: Voice / Wake Sound / Wake Word / Assistant Name / Memory / Web Search -->
+        <Grid Grid.Row="3" Margin="0,0,0,14">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="12"/>
+                <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
-            <CheckBox Grid.Column="0"
-                      IsChecked="{Binding EnableMemory}"
-                      Content="Remember conversations between sessions"
-                      Foreground="#D4D4D4" FontFamily="Segoe UI" FontSize="13"
-                      VerticalAlignment="Center"/>
-            <Button Grid.Column="1"
-                    Content="Wipe Memory" Command="{Binding WipeMemoryCommand}"
-                    Width="110" Height="28"
-                    Background="#5A1A1A" Foreground="#D4D4D4"
-                    BorderBrush="#8B2222" BorderThickness="1"
-                    FontFamily="Segoe UI" FontSize="12"
-                    Cursor="Hand" ToolTip="Erase all remembered conversations"/>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="10"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="10"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Voice -->
+            <Grid Grid.Row="0" Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Text="Voice"
+                           Foreground="#D4D4D4" FontFamily="Segoe UI"
+                           FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                <ComboBox Grid.Row="1"
+                          Style="{StaticResource DarkComboBox}"
+                          ItemContainerStyle="{StaticResource DarkComboBoxItem}"
+                          ItemsSource="{Binding AvailableVoices}"
+                          SelectedItem="{Binding SelectedVoice}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding DisplayName}"/>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+            </Grid>
+
+            <!-- Wake Sound -->
+            <Grid Grid.Row="0" Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Text="Wake Sound"
+                           Foreground="#D4D4D4" FontFamily="Segoe UI"
+                           FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                <ComboBox Grid.Row="1"
+                          Style="{StaticResource DarkComboBox}"
+                          ItemContainerStyle="{StaticResource DarkComboBoxItem}"
+                          ItemsSource="{Binding WakeSoundOptions, Mode=OneTime}"
+                          SelectedItem="{Binding WakeSound}"/>
+            </Grid>
+
+            <!-- Wake Word -->
+            <StackPanel Grid.Row="2" Grid.Column="0">
+                <TextBlock Text="Wake Word"
+                           Foreground="#D4D4D4" FontFamily="Segoe UI"
+                           FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                <TextBox Text="{Binding WakeWord, UpdateSourceTrigger=PropertyChanged}"
+                         Background="#252526" Foreground="#D4D4D4" CaretBrush="#D4D4D4"
+                         BorderBrush="#3C3C3C" BorderThickness="1"
+                         FontFamily="Segoe UI" FontSize="13"
+                         Padding="8,6"/>
+                <TextBlock Text="e.g. &quot;hey ryan&quot;"
+                           Foreground="#666666" FontFamily="Segoe UI" FontSize="10"
+                           Margin="2,3,0,0"/>
+            </StackPanel>
+
+            <!-- Assistant Name -->
+            <StackPanel Grid.Row="2" Grid.Column="2">
+                <TextBlock Text="Assistant Name"
+                           Foreground="#D4D4D4" FontFamily="Segoe UI"
+                           FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                <TextBox Text="{Binding AssistantName, UpdateSourceTrigger=PropertyChanged}"
+                         Background="#252526" Foreground="#D4D4D4" CaretBrush="#D4D4D4"
+                         BorderBrush="#3C3C3C" BorderThickness="1"
+                         FontFamily="Segoe UI" FontSize="13"
+                         Padding="8,6"/>
+                <TextBlock Text="shown in chat bubbles"
+                           Foreground="#666666" FontFamily="Segoe UI" FontSize="10"
+                           Margin="2,3,0,0"/>
+            </StackPanel>
+
+            <!-- Memory -->
+            <StackPanel Grid.Row="4" Grid.Column="0">
+                <TextBlock Text="Memory"
+                           Foreground="#D4D4D4" FontFamily="Segoe UI"
+                           FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                <DockPanel>
+                    <Button DockPanel.Dock="Right"
+                            Content="Wipe" Command="{Binding WipeMemoryCommand}"
+                            Width="60" Height="26"
+                            Background="#5A1A1A" Foreground="#D4D4D4"
+                            BorderBrush="#8B2222" BorderThickness="1"
+                            FontFamily="Segoe UI" FontSize="12"
+                            Cursor="Hand" ToolTip="Erase all remembered conversations"/>
+                    <CheckBox IsChecked="{Binding EnableMemory}"
+                              Content="Remember sessions"
+                              Foreground="#D4D4D4" FontFamily="Segoe UI" FontSize="13"
+                              VerticalAlignment="Center" Margin="0,0,8,0"/>
+                </DockPanel>
+            </StackPanel>
+
+            <!-- Web Search -->
+            <StackPanel Grid.Row="4" Grid.Column="2">
+                <TextBlock Text="Web Search"
+                           Foreground="#D4D4D4" FontFamily="Segoe UI"
+                           FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                <CheckBox IsChecked="{Binding EnableWebSearch}"
+                          Content="Enable web search"
+                          Foreground="#D4D4D4" FontFamily="Segoe UI" FontSize="13"
+                          VerticalAlignment="Center"
+                          ToolTip="Uses Anthropic's built-in search — no extra API key needed"/>
+            </StackPanel>
         </Grid>
-
-        <!-- Web Search label -->
-        <TextBlock Grid.Row="13" Text="Web Search"
-                   Foreground="#D4D4D4" FontFamily="Segoe UI"
-                   FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
-
-        <!-- Web Search toggle -->
-        <CheckBox Grid.Row="14"
-                  IsChecked="{Binding EnableWebSearch}"
-                  Content="Enable web search (uses Anthropic's built-in search, no extra API key)"
-                  Foreground="#D4D4D4" FontFamily="Segoe UI" FontSize="13"
-                  VerticalAlignment="Center" Margin="0,0,0,14"/>
 
         <!-- Silence timeout label -->
-        <TextBlock Grid.Row="15" Text="Pause Before Sending"
+        <TextBlock Grid.Row="4" Text="Pause Before Sending &amp; Conversation Wait"
                    Foreground="#D4D4D4" FontFamily="Segoe UI"
                    FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
 
         <!-- Silence timeout slider -->
-        <Grid Grid.Row="16" Margin="0,0,0,14">
+        <Grid Grid.Row="5" Margin="0,0,0,14">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
@@ -211,12 +189,12 @@
         </Grid>
 
         <!-- Silence threshold label -->
-        <TextBlock Grid.Row="17" Text="Voice Threshold"
+        <TextBlock Grid.Row="6" Text="Voice Threshold"
                    Foreground="#D4D4D4" FontFamily="Segoe UI"
                    FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
 
         <!-- Voice threshold slider -->
-        <Grid Grid.Row="18" Margin="0,0,0,14">
+        <Grid Grid.Row="7" Margin="0,0,0,14">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
@@ -233,13 +211,34 @@
                        VerticalAlignment="Center" Margin="10,0,0,0"/>
         </Grid>
 
+        <!-- Push-to-Talk key label -->
+        <TextBlock Grid.Row="8" Text="Push-to-Talk Key"
+                   Foreground="#D4D4D4" FontFamily="Segoe UI"
+                   FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
+
+        <!-- Push-to-Talk key capture -->
+        <StackPanel Grid.Row="9" Orientation="Horizontal" Margin="0,0,0,14">
+            <TextBox x:Name="PttKeyBox"
+                     Text="{Binding PttKey, Mode=OneWay}"
+                     IsReadOnly="True"
+                     Background="#252526" Foreground="#D4D4D4" CaretBrush="#D4D4D4"
+                     BorderBrush="#3C3C3C" BorderThickness="1"
+                     FontFamily="Segoe UI" FontSize="13"
+                     Padding="8,6" Width="120" TextAlignment="Center"
+                     Cursor="Hand" ToolTip="Click then press any key"
+                     PreviewKeyDown="PttKeyBox_PreviewKeyDown"/>
+            <TextBlock Text="  Click the box, then press any key"
+                       Foreground="#666666" FontFamily="Segoe UI" FontSize="11"
+                       VerticalAlignment="Center"/>
+        </StackPanel>
+
         <!-- System prompt label -->
-        <TextBlock Grid.Row="19" Text="System Prompt"
+        <TextBlock Grid.Row="10" Text="System Prompt"
                    Foreground="#D4D4D4" FontFamily="Segoe UI"
                    FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
 
         <!-- System prompt editor -->
-        <TextBox Grid.Row="20"
+        <TextBox Grid.Row="11"
                  Text="{Binding SystemPrompt, UpdateSourceTrigger=PropertyChanged}"
                  Background="#252526" Foreground="#D4D4D4" CaretBrush="#D4D4D4"
                  BorderBrush="#3C3C3C" BorderThickness="1"
@@ -249,7 +248,7 @@
                  Padding="8" VerticalContentAlignment="Top"/>
 
         <!-- Buttons -->
-        <StackPanel Grid.Row="21" Orientation="Horizontal"
+        <StackPanel Grid.Row="12" Orientation="Horizontal"
                     HorizontalAlignment="Right" Margin="0,12,0,0">
             <Button Content="Cancel" Width="80" Height="30" Margin="0,0,8,0"
                     Background="#3C3C3C" Foreground="#D4D4D4"

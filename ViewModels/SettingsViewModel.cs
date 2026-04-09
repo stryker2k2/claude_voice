@@ -20,6 +20,7 @@ public sealed class SettingsViewModel : ViewModelBase
     private bool         _enableWebSearch = false;
     private double       _silenceTimeout   = 4.0;
     private double       _voiceThresholdDb = -30.0;
+    private string       _wakeSound        = "Quindar";
 
     public string       ApiKey          { get => _apiKey;          set => SetField(ref _apiKey, value); }
     public string       SystemPrompt    { get => _systemPrompt;    set => SetField(ref _systemPrompt, value); }
@@ -31,6 +32,21 @@ public sealed class SettingsViewModel : ViewModelBase
     public bool         EnableWebSearch { get => _enableWebSearch; set => SetField(ref _enableWebSearch, value); }
     public double       SilenceTimeout    { get => _silenceTimeout;    set => SetField(ref _silenceTimeout, value); }
     public double       VoiceThresholdDb  { get => _voiceThresholdDb;  set => SetField(ref _voiceThresholdDb, value); }
+    public string       WakeSound         { get => _wakeSound;         set => SetField(ref _wakeSound, value); }
+
+    public static IReadOnlyList<string> WakeSoundOptions { get; } =
+    [
+        "Quindar",
+        "Chirp",
+        "High Tone",
+        "Star Trek",
+        "R2-D2",
+        "MGS Codec",
+        "Zelda Chest",
+        "Tri-tone",
+        "Sonar Ping",
+        "Mario Coin",
+    ];
 
     public string ConfigPath { get; } = AppConfig.LoadedPath;
 
@@ -50,6 +66,7 @@ public sealed class SettingsViewModel : ViewModelBase
         bool enableWebSearch,
         double silenceTimeout,
         double voiceThresholdDb,
+        string wakeSound,
         Action wipeMemoryAction)
     {
         _apiKey           = apiKey;
@@ -61,6 +78,7 @@ public sealed class SettingsViewModel : ViewModelBase
         _enableWebSearch  = enableWebSearch;
         _silenceTimeout   = silenceTimeout;
         _voiceThresholdDb = voiceThresholdDb;
+        _wakeSound        = WakeSoundOptions.Contains(wakeSound) ? wakeSound : "Quindar";
         AvailableVoices = voices;
         WipeMemoryCommand = new RelayCommand(wipeMemoryAction);
 

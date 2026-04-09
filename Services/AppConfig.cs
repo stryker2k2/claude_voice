@@ -37,6 +37,9 @@ public sealed class AppConfig
     // ambient noise floor and your speech level. Typical speech: -10 dBFS, noise: -40 dBFS.
     public double VoiceThresholdDb { get; init; } = -30.0;
 
+    // Wake sound played when the wake word is detected: "Quindar", "Chirp", or "HighTone"
+    public string WakeSound { get; init; } = "Quindar";
+
     // Claude system prompt
     public string SystemPrompt { get; init; } =
         "You are a helpful voice assistant. Keep responses conversational and concise — they will be spoken aloud.";

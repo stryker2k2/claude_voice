@@ -11,7 +11,15 @@ public sealed class ClaudeService
     private readonly List<MessageParam> _history = [];
     private bool _enableWebSearch;
 
+    // Always-on instructions that apply to every instance regardless of user settings.
+    private const string HiddenSystemPrompt =
+        "If the input sounds like an accidental microphone pickup (background noise, " +
+        "unintelligible audio, someone talking to someone else, a TV or radio in the background, " +
+        "etc.), ignore it completely and reply with nothing — an empty response.";
+
     public string SystemPrompt { get; set; }
+
+    private string EffectiveSystemPrompt => $"{SystemPrompt}\n\n{HiddenSystemPrompt}";
 
     /// <summary>
     /// Optional callback invoked with status strings (e.g. "Searching...") during
@@ -57,7 +65,7 @@ public sealed class ClaudeService
         {
             Model     = Model.ClaudeOpus4_6,
             MaxTokens = 64000,
-            System    = SystemPrompt,
+            System    = EffectiveSystemPrompt,
             Messages  = [.. _history],
         };
 
@@ -111,7 +119,7 @@ public sealed class ClaudeService
         {
             Model     = Model.ClaudeOpus4_6,
             MaxTokens = 64000,
-            System    = SystemPrompt,
+            System    = EffectiveSystemPrompt,
             Messages  = betaMessages,
             Tools     = [new BetaMsgs.BetaWebSearchTool20250305()],
             Betas     = ["web-search-2025-03-05"],

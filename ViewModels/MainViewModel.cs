@@ -20,6 +20,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private          WakeWordService? _wakeWord;
     private          CancellationTokenSource? _ttsCts;
     private          CancellationTokenSource? _autoRecordCts;
+    private          bool _skipFollowUpListen;
     private readonly MemoryService _memory = new();
     private readonly List<MemoryEntry> _memoryEntries = [];
 
@@ -152,6 +153,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         if (_stt is null || IsBusy || IsPttProcessing || IsRecording) return;
         IsRecording = true;
         SetStatus("Recording...", StatusKind.Busy);
+        PlayBloop(_config.WakeSound);
         _stt.StartRecording();
     }
 
@@ -227,7 +229,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         // Ignore if already busy
         if (_stt is null || IsBusy || IsPttProcessing || IsRecording) return;
 
-        PlayBloop();
+        PlayBloop(_config.WakeSound);
 
         // Pause wake word engine so it doesn't double-fire during recording
         _wakeWord?.StopListening();
@@ -256,7 +258,18 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             if (!string.IsNullOrWhiteSpace(text) && !IsNoiseTranscription(text))
                 await SendCoreAsync(text);
             else
-                SetStatus("Ready");
+            {
+                // No usable speech — resume wake word listening if active, else go ready
+                if (IsWakeWordActive)
+                {
+                    _wakeWord?.StartListening();
+                    SetStatus($"Listening for \"{_config.WakeWord}\"...");
+                }
+                else
+                {
+                    SetStatus("Ready");
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -369,6 +382,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             if (!string.IsNullOrWhiteSpace(remaining))
                 sentenceChannel.Writer.TryWrite(remaining);
 
+            if (sb.Length == 0)
+            {
+                _skipFollowUpListen = true;
+                Application.Current.Dispatcher.Invoke(() => assistantMsg.Text = "[No Response]");
+            }
+
             if (_config.EnableMemory)
             {
                 _memoryEntries.Add(new MemoryEntry("user",      userText));
@@ -458,7 +477,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         return new SettingsViewModel(
             _config.AnthropicApiKey, _claude.SystemPrompt, voices, currentModel,
             _config.PttKey ?? "F5", _config.WakeWord, _config.AssistantName,
-            _config.EnableMemory, _config.EnableWebSearch, _config.SilenceTimeout, _config.VoiceThresholdDb,
+            _config.EnableMemory, _config.EnableWebSearch, _config.SilenceTimeout, _config.VoiceThresholdDb, _config.WakeSound,
             wipeMemoryAction: () =>
             {
                 _memory.Wipe();
@@ -500,6 +519,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             EnableWebSearch = vm.EnableWebSearch,
             SilenceTimeout    = vm.SilenceTimeout,
             VoiceThresholdDb  = vm.VoiceThresholdDb,
+            WakeSound         = vm.WakeSound,
         };
         try
         {
@@ -524,34 +544,33 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     // Helpers
 
     /// <summary>
-    /// Synthesises and plays a short upward frequency sweep ("bloop") to confirm
-    /// wake-word detection. Runs fire-and-forget on a thread-pool thread.
+    /// Plays the selected wake sound. Options:
+    ///   "Quindar"   — 2525 Hz pure tone, 250 ms (NASA Quindar intro)
+    ///   "Chirp"     — upward frequency sweep, 220 ms (original bloop)
+    ///   "High Tone" — 3800 Hz pure tone, 180 ms
+    /// Runs fire-and-forget on a thread-pool thread.
     /// </summary>
-    private static void PlayBloop()
+    private static void PlayBloop(string wakeSound)
     {
         Task.Run(() =>
         {
             try
             {
-                const int    sampleRate = 44100;
-                const int    durationMs = 220;
-                const int    numSamples = sampleRate * durationMs / 1000;
-                const double startFreq  = 220.0;
-                const double endFreq    = 480.0;
-                const double totalTime  = durationMs / 1000.0;
+                const int sampleRate = 44100;
 
-                var samples = new float[numSamples];
-                for (int i = 0; i < numSamples; i++)
+                float[] samples = wakeSound switch
                 {
-                    double t     = (double)i / sampleRate;
-                    // Linear chirp: integrate instantaneous frequency to get phase
-                    double phase = 2 * Math.PI *
-                        (startFreq * t + (endFreq - startFreq) / (2.0 * totalTime) * t * t);
-                    // Envelope: 10 ms attack, 70 ms release
-                    double attack  = Math.Min(1.0, t / 0.010);
-                    double release = Math.Min(1.0, (totalTime - t) / 0.070);
-                    samples[i] = (float)(Math.Sin(phase) * 0.40 * attack * release);
-                }
+                    "Chirp"       => GenerateChirp(sampleRate, durationMs: 220, startFreq: 220,  endFreq: 480),
+                    "High Tone"   => GenerateTone(sampleRate,  durationMs: 180, freq: 3800),
+                    "Star Trek"   => GenerateTrekChirp(sampleRate),
+                    "R2-D2"       => GenerateR2D2(sampleRate),
+                    "MGS Codec"   => GenerateMgsCodec(sampleRate),
+                    "Zelda Chest" => GenerateZeldaChest(sampleRate),
+                    "Tri-tone"    => GenerateTriTone(sampleRate),
+                    "Sonar Ping"  => GenerateSonarPing(sampleRate),
+                    "Mario Coin"  => GenerateMarioCoin(sampleRate),
+                    _             => GenerateTone(sampleRate,  durationMs: 250, freq: 2525), // Quindar
+                };
 
                 var fmt = new WaveFormat(sampleRate, 16, 1);
                 using var ms     = new MemoryStream();
@@ -571,6 +590,132 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         });
     }
 
+    private static float[] GenerateTone(int sampleRate, int durationMs, double freq)
+    {
+        int    numSamples = sampleRate * durationMs / 1000;
+        double totalTime  = durationMs / 1000.0;
+        var    samples    = new float[numSamples];
+        for (int i = 0; i < numSamples; i++)
+        {
+            double t       = (double)i / sampleRate;
+            double phase   = 2 * Math.PI * freq * t;
+            double attack  = Math.Min(1.0, t / 0.005);
+            double release = Math.Min(1.0, (totalTime - t) / 0.015);
+            samples[i] = (float)(Math.Sin(phase) * 0.40 * attack * release);
+        }
+        return samples;
+    }
+
+    private static float[] GenerateChirp(int sampleRate, int durationMs, double startFreq, double endFreq)
+    {
+        int    numSamples = sampleRate * durationMs / 1000;
+        double totalTime  = durationMs / 1000.0;
+        var    samples    = new float[numSamples];
+        for (int i = 0; i < numSamples; i++)
+        {
+            double t      = (double)i / sampleRate;
+            double phase  = 2 * Math.PI * (startFreq * t + (endFreq - startFreq) / (2.0 * totalTime) * t * t);
+            double attack  = Math.Min(1.0, t / 0.010);
+            double release = Math.Min(1.0, (totalTime - t) / 0.070);
+            samples[i] = (float)(Math.Sin(phase) * 0.40 * attack * release);
+        }
+        return samples;
+    }
+
+    // Concatenate multiple sample arrays into one
+    private static float[] Concat(params float[][] parts) =>
+        parts.SelectMany(p => p).ToArray();
+
+    // Silent gap
+    private static float[] Silence(int sampleRate, int ms) =>
+        new float[sampleRate * ms / 1000];
+
+    // Star Trek communicator — three rapid ascending whistles
+    private static float[] GenerateTrekChirp(int sampleRate)
+    {
+        var chirp = GenerateChirp(sampleRate, durationMs: 80, startFreq: 800, endFreq: 2100);
+        var gap   = Silence(sampleRate, 22);
+        return Concat(chirp, gap, chirp, gap, chirp);
+    }
+
+    // R2-D2 — FM-synthesised warbling beeps at varying pitches
+    private static float[] GenerateR2D2(int sampleRate)
+    {
+        static float[] FmBeep(int sr, double fc, int ms)
+        {
+            int n = sr * ms / 1000;
+            double total = ms / 1000.0, fm = fc * 3.5, beta = 1.8;
+            var s = new float[n];
+            for (int i = 0; i < n; i++)
+            {
+                double t   = (double)i / sr;
+                double p   = 2 * Math.PI * fc * t + beta * Math.Sin(2 * Math.PI * fm * t);
+                double atk = Math.Min(1.0, t / 0.004);
+                double rel = Math.Min(1.0, (total - t) / 0.008);
+                s[i] = (float)(Math.Sin(p) * 0.38 * atk * rel);
+            }
+            return s;
+        }
+        var g = Silence(sampleRate, 18);
+        return Concat(
+            FmBeep(sampleRate, 1400, 55), g,
+            FmBeep(sampleRate,  800, 42), g,
+            FmBeep(sampleRate, 1650, 60), g,
+            FmBeep(sampleRate,  700, 38), g,
+            FmBeep(sampleRate, 1200, 80));
+    }
+
+    // Metal Gear Solid codec — short-short-short then long descending tone
+    private static float[] GenerateMgsCodec(int sampleRate)
+    {
+        var beep = GenerateTone(sampleRate, durationMs: 75,  freq: 900);
+        var drop = GenerateChirp(sampleRate, durationMs: 300, startFreq: 1100, endFreq: 620);
+        var gap  = Silence(sampleRate, 35);
+        return Concat(beep, gap, beep, gap, beep, gap, drop);
+    }
+
+    // Zelda chest — ascending G-major arpeggio (G4 B4 D5 G5)
+    private static float[] GenerateZeldaChest(int sampleRate)
+    {
+        var gap = Silence(sampleRate, 14);
+        return Concat(
+            GenerateTone(sampleRate, durationMs: 140, freq: 392), gap,  // G4
+            GenerateTone(sampleRate, durationMs: 140, freq: 494), gap,  // B4
+            GenerateTone(sampleRate, durationMs: 140, freq: 587), gap,  // D5
+            GenerateTone(sampleRate, durationMs: 380, freq: 784));      // G5
+    }
+
+    // iPhone tri-tone — three clean ascending tones
+    private static float[] GenerateTriTone(int sampleRate)
+    {
+        var gap = Silence(sampleRate, 28);
+        return Concat(
+            GenerateTone(sampleRate, durationMs: 100, freq:  941), gap,
+            GenerateTone(sampleRate, durationMs: 100, freq: 1175), gap,
+            GenerateTone(sampleRate, durationMs: 100, freq: 1480));
+    }
+
+    // Submarine sonar ping — pure tone with exponential decay
+    private static float[] GenerateSonarPing(int sampleRate)
+    {
+        int    n     = sampleRate * 500 / 1000;
+        double total = 0.5;
+        var    s     = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            double t   = (double)i / sampleRate;
+            double env = Math.Exp(-6.0 * t / total);
+            s[i] = (float)(Math.Sin(2 * Math.PI * 1100 * t) * 0.45 * env);
+        }
+        return s;
+    }
+
+    // Mario coin — two-note ascending (B5 → E6)
+    private static float[] GenerateMarioCoin(int sampleRate) =>
+        Concat(
+            GenerateTone(sampleRate, durationMs:  65, freq:  988),   // B5
+            GenerateTone(sampleRate, durationMs: 175, freq: 1319));  // E6
+
     /// <summary>
     /// Returns true for Whisper noise annotations like [BLANK_AUDIO], [ Silence ], etc.
     /// These should not be forwarded to Claude.
@@ -589,7 +734,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             msg.Contains("unauthorized",   StringComparison.OrdinalIgnoreCase) ||
             msg.Contains("api key",        StringComparison.OrdinalIgnoreCase) ||
             msg.Contains("401",            StringComparison.Ordinal))
-            return "I'm not able to respond right now — the API key looks invalid. Please check your config.json and make sure the Anthropic API key is correct.";
+            return "I'm not able to respond right now — the API key looks invalid. Open Settings and make sure your Anthropic API key is correct.";
         return $"Error: {ex.Message}";
     }
 
@@ -716,6 +861,17 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        // If the last response was empty, skip the follow-up window and drop
+        // straight back to wake-word listening without prompting the user to speak.
+        if (_skipFollowUpListen)
+        {
+            _skipFollowUpListen = false;
+            goto resumeWakeWord;
+        }
+
+        // Tone signals that the mic is now open for a reply
+        PlayBloop(_config.WakeSound);
+
         // Open a follow-up listen window — user has 5 s to start speaking.
         // Only set IsPttProcessing (blocks PTT) — NOT IsRecording, which would
         // turn the Hold-to-Talk button red and confuse the user.
@@ -732,7 +888,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 silenceTimeout:   TimeSpan.FromSeconds(_config.SilenceTimeout),
                 maxDuration:      TimeSpan.FromSeconds(60),
                 silenceThreshold: DbFsToRms(_config.VoiceThresholdDb),
-                noSpeechTimeout:  TimeSpan.FromSeconds(5),
+                noSpeechTimeout:  TimeSpan.FromSeconds(_config.SilenceTimeout),
                 ct:               _autoRecordCts.Token);
 
             if (hitMax) AddSystemNote("— recording limit reached, message sent —");
@@ -754,7 +910,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             IsPttProcessing = false;
         }
 
-        // No speech detected — resume wake word listening
+        resumeWakeWord:
+        // No speech detected (or no response) — resume wake word listening
         Application.Current.Dispatcher.Invoke(() =>
         {
             if (IsWakeWordActive)

@@ -1,7 +1,8 @@
 # install.ps1
 # Publishes Claude Voice and installs it to %LOCALAPPDATA%\ClaudeVoice\
 # Creates a Start Menu shortcut.
-# Safe to re-run - preserves your existing config.json.
+# Always performs a clean install: resets config.json to the example template
+# and clears memory.json. Use "dotnet run" during development to keep your config/history.
 
 $ErrorActionPreference = "Stop"
 
@@ -47,24 +48,25 @@ if (Test-Path $iconSrc) {
     Copy-Item $iconSrc $installDir -Force
 }
 
-# --- 5. Seed config.json if not already present (preserve user settings on update) ---
+# --- 5. Reset config.json from template (fresh install — no preserved settings) ---
 $configDst     = Join-Path $installDir "config.json"
-$configSrc     = Join-Path $projectDir "config.json"
 $configExample = Join-Path $projectDir "config.example.json"
-if (Test-Path $configDst) {
-    Write-Host "Preserving existing config.json."
-} elseif (Test-Path $configSrc) {
-    Write-Host "Copying config.json..."
-    Copy-Item $configSrc $configDst
-} elseif (Test-Path $configExample) {
-    Write-Host "Seeding config.json from config.example.json..."
-    Copy-Item $configExample $configDst
+if (Test-Path $configExample) {
+    Write-Host "Writing fresh config.json from config.example.json..."
+    Copy-Item $configExample $configDst -Force
     Write-Host ""
     Write-Host "ACTION REQUIRED: Add your Anthropic API key to:" -ForegroundColor Yellow
     Write-Host "  $configDst" -ForegroundColor Yellow
     Write-Host ""
 } else {
-    Write-Warning "No config found - create $configDst before launching."
+    Write-Warning "config.example.json not found - create $configDst before launching."
+}
+
+# --- 5b. Clear conversation history ---
+$memoryDst = Join-Path $installDir "memory.json"
+if (Test-Path $memoryDst) {
+    Write-Host "Clearing memory.json..."
+    Remove-Item $memoryDst -Force
 }
 
 # --- 6. Create Start Menu shortcut ---
@@ -81,4 +83,4 @@ Write-Host ""
 Write-Host "Done! Claude Voice installed to: $installDir"
 Write-Host "Start Menu shortcut created."
 Write-Host ""
-Write-Host "To update: just run install.ps1 again. Your config.json will be preserved."
+Write-Host "Note: install.ps1 always resets config.json and clears memory. Use 'dotnet run' to keep your config/history."
