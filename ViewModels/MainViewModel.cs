@@ -5,6 +5,7 @@ using System.Threading.Channels;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using NAudio.Wave;
 
 namespace claude_voice;
 
@@ -225,6 +226,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     {
         // Ignore if already busy
         if (_stt is null || IsBusy || IsPttProcessing || IsRecording) return;
+
+        PlayBloop();
 
         // Pause wake word engine so it doesn't double-fire during recording
         _wakeWord?.StopListening();
@@ -453,7 +456,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         var voices       = ScanPiperVoices();
         var currentModel = ResolveModelPath(_config.PiperModel ?? "");
         return new SettingsViewModel(
-            _claude.SystemPrompt, voices, currentModel,
+            _config.AnthropicApiKey, _claude.SystemPrompt, voices, currentModel,
             _config.PttKey ?? "F5", _config.WakeWord, _config.AssistantName,
             _config.EnableMemory, _config.EnableWebSearch, _config.SilenceTimeout, _config.VoiceThresholdDb,
             wipeMemoryAction: () =>
@@ -468,6 +471,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     {
         _claude.SystemPrompt = vm.SystemPrompt;
         _claude.SetWebSearch(vm.EnableWebSearch);
+        if (!string.IsNullOrWhiteSpace(vm.ApiKey))
+            _claude.SetApiKey(vm.ApiKey);
 
         var newModel = vm.SelectedVoice?.FullPath ?? _config.PiperModel ?? "";
         if (!string.IsNullOrEmpty(newModel))
@@ -481,7 +486,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
         _config = new AppConfig
         {
-            AnthropicApiKey = _config.AnthropicApiKey,
+            AnthropicApiKey = string.IsNullOrWhiteSpace(vm.ApiKey) ? _config.AnthropicApiKey : vm.ApiKey,
             WhisperModel    = _config.WhisperModel,
             PiperExe        = _config.PiperExe,
             PiperModel      = ToRelativePath(newModel),
@@ -496,7 +501,14 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             SilenceTimeout    = vm.SilenceTimeout,
             VoiceThresholdDb  = vm.VoiceThresholdDb,
         };
-        AppConfig.Save(_config);
+        try
+        {
+            AppConfig.Save(_config);
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Settings saved in memory, but could not write config file: {ex.Message}", StatusKind.Error);
+        }
 
         if (wakeWordChanged && IsWakeWordActive)
         {
@@ -512,6 +524,54 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     // Helpers
 
     /// <summary>
+    /// Synthesises and plays a short upward frequency sweep ("bloop") to confirm
+    /// wake-word detection. Runs fire-and-forget on a thread-pool thread.
+    /// </summary>
+    private static void PlayBloop()
+    {
+        Task.Run(() =>
+        {
+            try
+            {
+                const int    sampleRate = 44100;
+                const int    durationMs = 220;
+                const int    numSamples = sampleRate * durationMs / 1000;
+                const double startFreq  = 220.0;
+                const double endFreq    = 480.0;
+                const double totalTime  = durationMs / 1000.0;
+
+                var samples = new float[numSamples];
+                for (int i = 0; i < numSamples; i++)
+                {
+                    double t     = (double)i / sampleRate;
+                    // Linear chirp: integrate instantaneous frequency to get phase
+                    double phase = 2 * Math.PI *
+                        (startFreq * t + (endFreq - startFreq) / (2.0 * totalTime) * t * t);
+                    // Envelope: 10 ms attack, 70 ms release
+                    double attack  = Math.Min(1.0, t / 0.010);
+                    double release = Math.Min(1.0, (totalTime - t) / 0.070);
+                    samples[i] = (float)(Math.Sin(phase) * 0.40 * attack * release);
+                }
+
+                var fmt = new WaveFormat(sampleRate, 16, 1);
+                using var ms     = new MemoryStream();
+                using var writer = new WaveFileWriter(ms, fmt);
+                writer.WriteSamples(samples, 0, samples.Length);
+                writer.Flush();
+
+                ms.Position = 0;
+                using var reader  = new WaveFileReader(ms);
+                using var waveOut = new WaveOutEvent();
+                waveOut.Init(reader);
+                waveOut.Play();
+                while (waveOut.PlaybackState == PlaybackState.Playing)
+                    System.Threading.Thread.Sleep(10);
+            }
+            catch { /* best-effort audio */ }
+        });
+    }
+
+    /// <summary>
     /// Returns true for Whisper noise annotations like [BLANK_AUDIO], [ Silence ], etc.
     /// These should not be forwarded to Claude.
     /// </summary>
@@ -525,6 +585,11 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         if (msg.Contains("credit balance", StringComparison.OrdinalIgnoreCase) ||
             msg.Contains("too low to access", StringComparison.OrdinalIgnoreCase))
             return "I'm not able to respond right now — the API credit balance is too low. Please visit Anthropic's Plans & Billing to add credits.";
+        if (msg.Contains("authentication", StringComparison.OrdinalIgnoreCase) ||
+            msg.Contains("unauthorized",   StringComparison.OrdinalIgnoreCase) ||
+            msg.Contains("api key",        StringComparison.OrdinalIgnoreCase) ||
+            msg.Contains("401",            StringComparison.Ordinal))
+            return "I'm not able to respond right now — the API key looks invalid. Please check your config.json and make sure the Anthropic API key is correct.";
         return $"Error: {ex.Message}";
     }
 

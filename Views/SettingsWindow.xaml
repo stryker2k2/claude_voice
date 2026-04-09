@@ -27,6 +27,8 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
@@ -36,13 +38,33 @@
                    Foreground="#9CDCFE" FontFamily="Segoe UI"
                    FontSize="16" FontWeight="SemiBold" Margin="0,0,0,16"/>
 
+        <!-- API Key label -->
+        <TextBlock Grid.Row="1" Text="Anthropic API Key"
+                   Foreground="#D4D4D4" FontFamily="Segoe UI"
+                   FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
+
+        <!-- API Key input + config path hint -->
+        <StackPanel Grid.Row="2" Margin="0,0,0,14">
+            <TextBox x:Name="ApiKeyBox"
+                     Text="{Binding ApiKey, UpdateSourceTrigger=PropertyChanged}"
+                     Background="#252526" Foreground="#D4D4D4" CaretBrush="#D4D4D4"
+                     BorderBrush="#3C3C3C" BorderThickness="1"
+                     FontFamily="Consolas" FontSize="12"
+                     Padding="8,6"
+                     ToolTip="Paste your Anthropic API key here"/>
+            <TextBlock Text="{Binding ConfigPath, StringFormat='Config: {0}'}"
+                       Foreground="#555555" FontFamily="Segoe UI" FontSize="10"
+                       Margin="2,3,0,0" TextTrimming="CharacterEllipsis"
+                       ToolTip="{Binding ConfigPath}"/>
+        </StackPanel>
+
         <!-- Voice label -->
-        <TextBlock Grid.Row="1" Text="Voice"
+        <TextBlock Grid.Row="3" Text="Voice"
                    Foreground="#D4D4D4" FontFamily="Segoe UI"
                    FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
 
         <!-- Voice dropdown -->
-        <ComboBox Grid.Row="2"
+        <ComboBox Grid.Row="4"
                   Style="{StaticResource DarkComboBox}"
                   ItemContainerStyle="{StaticResource DarkComboBoxItem}"
                   ItemsSource="{Binding AvailableVoices}"
@@ -56,12 +78,12 @@
         </ComboBox>
 
         <!-- PTT key label -->
-        <TextBlock Grid.Row="3" Text="Push-to-Talk Key"
+        <TextBlock Grid.Row="5" Text="Push-to-Talk Key"
                    Foreground="#D4D4D4" FontFamily="Segoe UI"
                    FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
 
         <!-- PTT key capture box -->
-        <Grid Grid.Row="4" Margin="0,0,0,14">
+        <Grid Grid.Row="6" Margin="0,0,0,14">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="120"/>
                 <ColumnDefinition Width="*"/>
@@ -83,12 +105,12 @@
         </Grid>
 
         <!-- Wake word label -->
-        <TextBlock Grid.Row="5" Text="Wake Word"
+        <TextBlock Grid.Row="7" Text="Wake Word"
                    Foreground="#D4D4D4" FontFamily="Segoe UI"
                    FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
 
         <!-- Wake word input -->
-        <Grid Grid.Row="6" Margin="0,0,0,14">
+        <Grid Grid.Row="8" Margin="0,0,0,14">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="200"/>
                 <ColumnDefinition Width="*"/>
@@ -106,12 +128,12 @@
         </Grid>
 
         <!-- Assistant name label -->
-        <TextBlock Grid.Row="7" Text="Assistant Name"
+        <TextBlock Grid.Row="9" Text="Assistant Name"
                    Foreground="#D4D4D4" FontFamily="Segoe UI"
                    FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
 
         <!-- Assistant name input -->
-        <Grid Grid.Row="8" Margin="0,0,0,14">
+        <Grid Grid.Row="10" Margin="0,0,0,14">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="200"/>
                 <ColumnDefinition Width="*"/>
@@ -129,12 +151,12 @@
         </Grid>
 
         <!-- Memory label -->
-        <TextBlock Grid.Row="9" Text="Memory"
+        <TextBlock Grid.Row="11" Text="Memory"
                    Foreground="#D4D4D4" FontFamily="Segoe UI"
                    FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
 
         <!-- Memory controls -->
-        <Grid Grid.Row="10" Margin="0,0,0,14">
+        <Grid Grid.Row="12" Margin="0,0,0,14">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
@@ -154,24 +176,24 @@
         </Grid>
 
         <!-- Web Search label -->
-        <TextBlock Grid.Row="11" Text="Web Search"
+        <TextBlock Grid.Row="13" Text="Web Search"
                    Foreground="#D4D4D4" FontFamily="Segoe UI"
                    FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
 
         <!-- Web Search toggle -->
-        <CheckBox Grid.Row="12"
+        <CheckBox Grid.Row="14"
                   IsChecked="{Binding EnableWebSearch}"
                   Content="Enable web search (uses Anthropic's built-in search, no extra API key)"
                   Foreground="#D4D4D4" FontFamily="Segoe UI" FontSize="13"
                   VerticalAlignment="Center" Margin="0,0,0,14"/>
 
         <!-- Silence timeout label -->
-        <TextBlock Grid.Row="13" Text="Pause Before Sending"
+        <TextBlock Grid.Row="15" Text="Pause Before Sending"
                    Foreground="#D4D4D4" FontFamily="Segoe UI"
                    FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
 
         <!-- Silence timeout slider -->
-        <Grid Grid.Row="14" Margin="0,0,0,14">
+        <Grid Grid.Row="16" Margin="0,0,0,14">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
@@ -189,12 +211,12 @@
         </Grid>
 
         <!-- Silence threshold label -->
-        <TextBlock Grid.Row="15" Text="Voice Threshold"
+        <TextBlock Grid.Row="17" Text="Voice Threshold"
                    Foreground="#D4D4D4" FontFamily="Segoe UI"
                    FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
 
         <!-- Voice threshold slider -->
-        <Grid Grid.Row="16" Margin="0,0,0,14">
+        <Grid Grid.Row="18" Margin="0,0,0,14">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
@@ -212,12 +234,12 @@
         </Grid>
 
         <!-- System prompt label -->
-        <TextBlock Grid.Row="17" Text="System Prompt"
+        <TextBlock Grid.Row="19" Text="System Prompt"
                    Foreground="#D4D4D4" FontFamily="Segoe UI"
                    FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
 
         <!-- System prompt editor -->
-        <TextBox Grid.Row="18"
+        <TextBox Grid.Row="20"
                  Text="{Binding SystemPrompt, UpdateSourceTrigger=PropertyChanged}"
                  Background="#252526" Foreground="#D4D4D4" CaretBrush="#D4D4D4"
                  BorderBrush="#3C3C3C" BorderThickness="1"
@@ -227,7 +249,7 @@
                  Padding="8" VerticalContentAlignment="Top"/>
 
         <!-- Buttons -->
-        <StackPanel Grid.Row="19" Orientation="Horizontal"
+        <StackPanel Grid.Row="21" Orientation="Horizontal"
                     HorizontalAlignment="Right" Margin="0,12,0,0">
             <Button Content="Cancel" Width="80" Height="30" Margin="0,0,8,0"
                     Background="#3C3C3C" Foreground="#D4D4D4"

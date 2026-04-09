@@ -48,6 +48,9 @@ public sealed class AppConfig
 
     private static string? _loadedPath;
 
+    /// <summary>The path that was used to load the config — also where Save() writes.</summary>
+    public static string LoadedPath => _loadedPath ?? "(not loaded)";
+
     public static AppConfig Load()
     {
         var locations = new[]

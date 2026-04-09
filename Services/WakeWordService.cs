@@ -54,7 +54,7 @@ public sealed class WakeWordService : IDisposable
         // Higher confidence threshold to reduce false positives from background audio
         // (TV, YouTube, etc.). SAPI5 reports 0.9+ for clearly spoken phrases up close;
         // coincidental audio matches rarely exceed 0.75.
-        if (e.Result.Confidence < 0.85f) return;
+        if (e.Result.Confidence < 0.75f) return;
 
         // Cooldown — one trigger per window to absorb SAPI5 buffer echoes
         var now = DateTime.UtcNow;

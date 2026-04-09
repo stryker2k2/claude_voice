@@ -10,6 +10,7 @@ public record VoiceOption(string DisplayName, string FullPath);
 
 public sealed class SettingsViewModel : ViewModelBase
 {
+    private string       _apiKey         = "";
     private string       _systemPrompt   = "";
     private VoiceOption? _selectedVoice;
     private string       _pttKey         = "F5";
@@ -20,6 +21,7 @@ public sealed class SettingsViewModel : ViewModelBase
     private double       _silenceTimeout   = 4.0;
     private double       _voiceThresholdDb = -30.0;
 
+    public string       ApiKey          { get => _apiKey;          set => SetField(ref _apiKey, value); }
     public string       SystemPrompt    { get => _systemPrompt;    set => SetField(ref _systemPrompt, value); }
     public VoiceOption? SelectedVoice   { get => _selectedVoice;   set => SetField(ref _selectedVoice, value); }
     public string       PttKey          { get => _pttKey;          set => SetField(ref _pttKey, value); }
@@ -30,11 +32,14 @@ public sealed class SettingsViewModel : ViewModelBase
     public double       SilenceTimeout    { get => _silenceTimeout;    set => SetField(ref _silenceTimeout, value); }
     public double       VoiceThresholdDb  { get => _voiceThresholdDb;  set => SetField(ref _voiceThresholdDb, value); }
 
+    public string ConfigPath { get; } = AppConfig.LoadedPath;
+
     public ICommand WipeMemoryCommand { get; }
 
     public IReadOnlyList<VoiceOption> AvailableVoices { get; }
 
     public SettingsViewModel(
+        string apiKey,
         string systemPrompt,
         IReadOnlyList<VoiceOption> voices,
         string currentVoicePath,
@@ -47,6 +52,7 @@ public sealed class SettingsViewModel : ViewModelBase
         double voiceThresholdDb,
         Action wipeMemoryAction)
     {
+        _apiKey           = apiKey;
         _systemPrompt     = systemPrompt;
         _pttKey           = pttKey;
         _wakeWord         = wakeWord;

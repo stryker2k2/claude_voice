@@ -7,7 +7,7 @@ namespace claude_voice;
 
 public sealed class ClaudeService
 {
-    private readonly AnthropicClient _client;
+    private AnthropicClient _client;
     private readonly List<MessageParam> _history = [];
     private bool _enableWebSearch;
 
@@ -27,6 +27,13 @@ public sealed class ClaudeService
     }
 
     public void SetWebSearch(bool enabled) => _enableWebSearch = enabled;
+
+    public void SetApiKey(string apiKey)
+    {
+        // AnthropicClient.ApiKey is init-only, so recreate the client with the new key.
+        // Existing history is unaffected.
+        _client = new AnthropicClient() { ApiKey = apiKey };
+    }
 
     public async Task StreamResponseAsync(
         string userMessage,
