@@ -109,7 +109,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             if (_memoryEntries.Count > 0)
             {
                 _claude.LoadHistory(_memoryEntries);
-                foreach (var entry in _memoryEntries.TakeLast(6))
+                foreach (var entry in _memoryEntries.TakeLast(12))
                     Messages.Add(new ChatMessage
                     {
                         Role        = entry.Role,
