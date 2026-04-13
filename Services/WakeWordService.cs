@@ -16,9 +16,12 @@ public sealed class WakeWordService : IDisposable
 
     public event EventHandler? WakeWordDetected;
 
-    public WakeWordService(string wakeWord)
+    private readonly float _confidenceThreshold;
+
+    public WakeWordService(string wakeWord, float confidenceThreshold = 0.75f)
     {
-        _wakeWord = wakeWord.Trim();
+        _wakeWord             = wakeWord.Trim();
+        _confidenceThreshold  = Math.Clamp(confidenceThreshold, 0f, 1f);
         _engine = new SpeechRecognitionEngine(new CultureInfo("en-US"));
 
         var builder = new GrammarBuilder(wakeWord.Trim()) { Culture = new CultureInfo("en-US") };
@@ -56,7 +59,7 @@ public sealed class WakeWordService : IDisposable
         // Higher confidence threshold to reduce false positives from background audio
         // (TV, YouTube, etc.). SAPI5 reports 0.9+ for clearly spoken phrases up close;
         // coincidental audio matches rarely exceed 0.75.
-        if (e.Result.Confidence < 0.75f) return;
+        if (e.Result.Confidence < _confidenceThreshold) return;
         if (!string.Equals(e.Result.Text, _wakeWord, StringComparison.OrdinalIgnoreCase)) return;
 
         // Cooldown — one trigger per window to absorb SAPI5 buffer echoes

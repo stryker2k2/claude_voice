@@ -28,6 +28,10 @@ public sealed class AppConfig
     // Wake word for always-on listening mode (e.g. "hey claude")
     public string WakeWord { get; init; } = "hey claude";
 
+    // Confidence threshold for wake word recognition (0.0–1.0).
+    // Lower = more sensitive (more false triggers); higher = stricter (may miss quiet speech).
+    public double WakeWordConfidence { get; init; } = 0.75;
+
     // Display name shown in chat bubbles and used as the assistant's identity
     public string AssistantName { get; init; } = "Claude";
 

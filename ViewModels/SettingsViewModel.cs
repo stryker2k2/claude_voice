@@ -21,8 +21,9 @@ public sealed class SettingsViewModel : ViewModelBase
     private bool         _enableMemory   = true;
     private bool         _enableWebSearch = false;
     private double       _silenceTimeout   = 4.0;
-    private double       _voiceThresholdDb = -30.0;
-    private string       _wakeSound        = "Quindar";
+    private double       _voiceThresholdDb    = -30.0;
+    private string       _wakeSound           = "Quindar";
+    private double       _wakeWordConfidence  = 0.75;
 
     public string       ApiKey          { get => _apiKey;          set => SetField(ref _apiKey, value); }
     public string       SystemPrompt    { get => _systemPrompt;    set => SetField(ref _systemPrompt, value); }
@@ -42,7 +43,8 @@ public sealed class SettingsViewModel : ViewModelBase
     public bool         EnableWebSearch { get => _enableWebSearch; set => SetField(ref _enableWebSearch, value); }
     public double       SilenceTimeout    { get => _silenceTimeout;    set => SetField(ref _silenceTimeout, value); }
     public double       VoiceThresholdDb  { get => _voiceThresholdDb;  set => SetField(ref _voiceThresholdDb, value); }
-    public string       WakeSound         { get => _wakeSound;         set => SetField(ref _wakeSound, value); }
+    public string       WakeSound           { get => _wakeSound;           set => SetField(ref _wakeSound, value); }
+    public double       WakeWordConfidence  { get => _wakeWordConfidence;  set => SetField(ref _wakeWordConfidence, value); }
 
     public static IReadOnlyList<string> WakeSoundOptions { get; } =
     [
@@ -85,6 +87,7 @@ public sealed class SettingsViewModel : ViewModelBase
         double silenceTimeout,
         double voiceThresholdDb,
         string wakeSound,
+        double wakeWordConfidence,
         Action wipeMemoryAction,
         Action<string>? previewVoice = null)
     {
@@ -97,8 +100,9 @@ public sealed class SettingsViewModel : ViewModelBase
         _enableWebSearch  = enableWebSearch;
         _silenceTimeout   = silenceTimeout;
         _voiceThresholdDb = voiceThresholdDb;
-        _wakeSound        = WakeSoundOptions.Contains(wakeSound) ? wakeSound : "Quindar";
-        AvailableVoices   = voices;
+        _wakeSound          = WakeSoundOptions.Contains(wakeSound) ? wakeSound : "Quindar";
+        _wakeWordConfidence = wakeWordConfidence;
+        AvailableVoices     = voices;
         OriginalVoicePath = currentVoicePath;
         _previewVoice     = previewVoice;
         WipeMemoryCommand = new RelayCommand(() =>

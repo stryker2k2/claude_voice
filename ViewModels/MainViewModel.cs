@@ -216,7 +216,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         {
             try
             {
-                _wakeWord = new WakeWordService(_config.WakeWord);
+                _wakeWord = new WakeWordService(_config.WakeWord, (float)_config.WakeWordConfidence);
                 _wakeWord.WakeWordDetected += OnWakeWordDetected;
                 _wakeWord.StartListening();
                 IsWakeWordActive = true;
@@ -500,6 +500,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             _config.AnthropicApiKey, _claude.SystemPrompt, voices, currentModel,
             _config.PttKey ?? "F5", _config.WakeWord, _config.AssistantName,
             _config.EnableMemory, _config.EnableWebSearch, _config.SilenceTimeout, _config.VoiceThresholdDb, _config.WakeSound,
+            _config.WakeWordConfidence,
             wipeMemoryAction: () =>
             {
                 _memory.Wipe();
@@ -540,9 +541,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
         PttKey = Enum.TryParse<Key>(vm.PttKey, ignoreCase: true, out var k) ? k : PttKey;
 
-        // If wake word text changed and listening is active, recreate the service
+        // If wake word text or confidence changed and listening is active, recreate the service
         var wakeWordChanged = !string.Equals(vm.WakeWord, _config.WakeWord,
-            StringComparison.OrdinalIgnoreCase);
+            StringComparison.OrdinalIgnoreCase)
+            || vm.WakeWordConfidence != _config.WakeWordConfidence;
 
         _config = new AppConfig
         {
@@ -559,9 +561,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             AssistantName    = vm.AssistantName,
             EnableMemory     = vm.EnableMemory,
             EnableWebSearch  = vm.EnableWebSearch,
-            SilenceTimeout   = vm.SilenceTimeout,
-            VoiceThresholdDb = vm.VoiceThresholdDb,
-            WakeSound        = vm.WakeSound,
+            SilenceTimeout      = vm.SilenceTimeout,
+            VoiceThresholdDb    = vm.VoiceThresholdDb,
+            WakeSound           = vm.WakeSound,
+            WakeWordConfidence  = vm.WakeWordConfidence,
         };
         try
         {

@@ -152,18 +152,21 @@
             <TabItem Header="Audio">
                 <Grid Margin="0,14,0,0">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="14"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="14"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="14"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="14"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>  <!-- 0: Voice + Wake Sound -->
+                        <RowDefinition Height="14"/>    <!-- 1: spacer -->
+                        <RowDefinition Height="Auto"/>  <!-- 2: Wake Word -->
+                        <RowDefinition Height="14"/>    <!-- 3: spacer -->
+                        <RowDefinition Height="Auto"/>  <!-- 4: Wake Word Sensitivity label -->
+                        <RowDefinition Height="Auto"/>  <!-- 5: Wake Word Sensitivity slider -->
+                        <RowDefinition Height="14"/>    <!-- 6: spacer -->
+                        <RowDefinition Height="Auto"/>  <!-- 7: Silence timeout label -->
+                        <RowDefinition Height="Auto"/>  <!-- 8: Silence timeout slider -->
+                        <RowDefinition Height="14"/>    <!-- 9: spacer -->
+                        <RowDefinition Height="Auto"/>  <!-- 10: Voice threshold label -->
+                        <RowDefinition Height="Auto"/>  <!-- 11: Voice threshold slider -->
+                        <RowDefinition Height="14"/>    <!-- 12: spacer -->
+                        <RowDefinition Height="Auto"/>  <!-- 13: PTT label -->
+                        <RowDefinition Height="Auto"/>  <!-- 14: PTT box -->
                     </Grid.RowDefinitions>
 
                     <!-- Voice + Wake Sound (2-col) -->
@@ -216,13 +219,37 @@
                                    Margin="2,3,0,0"/>
                     </StackPanel>
 
+                    <!-- Wake Word Sensitivity label -->
+                    <TextBlock Grid.Row="4" Text="Wake Word Sensitivity"
+                               Foreground="#D4D4D4" FontFamily="Segoe UI"
+                               FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
+
+                    <!-- Wake Word Sensitivity slider -->
+                    <Grid Grid.Row="5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Slider Grid.Column="0"
+                                Minimum="0.50" Maximum="0.98"
+                                Value="{Binding WakeWordConfidence}"
+                                TickFrequency="0.01" IsSnapToTickEnabled="True"
+                                VerticalAlignment="Center"
+                                ToolTip="Lower = easier to trigger (more false positives); Higher = stricter (may miss quiet speech)"/>
+                        <TextBlock Grid.Column="1"
+                                   Text="{Binding WakeWordConfidence, StringFormat='{}{0:P0}'}"
+                                   Foreground="#D4D4D4" FontFamily="Segoe UI" FontSize="13"
+                                   Width="44" TextAlignment="Right"
+                                   VerticalAlignment="Center" Margin="10,0,0,0"/>
+                    </Grid>
+
                     <!-- Silence timeout label -->
-                    <TextBlock Grid.Row="4" Text="Pause Before Sending &amp; Conversation Wait"
+                    <TextBlock Grid.Row="7" Text="Pause Before Sending &amp; Conversation Wait"
                                Foreground="#D4D4D4" FontFamily="Segoe UI"
                                FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
 
                     <!-- Silence timeout slider -->
-                    <Grid Grid.Row="5" Margin="0,0,0,0">
+                    <Grid Grid.Row="8">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
@@ -240,12 +267,12 @@
                     </Grid>
 
                     <!-- Voice threshold label -->
-                    <TextBlock Grid.Row="7" Text="Voice Threshold"
+                    <TextBlock Grid.Row="10" Text="Voice Threshold"
                                Foreground="#D4D4D4" FontFamily="Segoe UI"
                                FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
 
                     <!-- Voice threshold slider -->
-                    <Grid Grid.Row="8">
+                    <Grid Grid.Row="11">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
@@ -263,12 +290,12 @@
                     </Grid>
 
                     <!-- PTT label -->
-                    <TextBlock Grid.Row="10" Text="Push-to-Talk Key"
+                    <TextBlock Grid.Row="13" Text="Push-to-Talk Key"
                                Foreground="#D4D4D4" FontFamily="Segoe UI"
                                FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
 
                     <!-- PTT key capture -->
-                    <StackPanel Grid.Row="11" Orientation="Horizontal">
+                    <StackPanel Grid.Row="14" Orientation="Horizontal">
                         <TextBox x:Name="PttKeyBox"
                                  Text="{Binding PttKey, Mode=OneWay}"
                                  IsReadOnly="True"
