@@ -32,27 +32,130 @@ $PiperVoices = @(
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
+$piperDir = Join-Path $PSScriptRoot "piper"
+New-Item -ItemType Directory -Force -Path $piperDir | Out-Null
+
 # ---------------------------------------------------------------------------
-# 1. Download Piper TTS binary + voice models
+# 1. Piper binary
 # ---------------------------------------------------------------------------
 Write-Host ""
-Write-Host "=== Step 1: Piper TTS ===" -ForegroundColor Yellow
-foreach ($voice in $PiperVoices) {
-    & "$PSScriptRoot\download-piper.ps1" -Voice $voice
+Write-Host "=== Step 1: Piper binary ===" -ForegroundColor Yellow
+
+$piperExePath = Join-Path $piperDir "piper.exe"
+if (Test-Path $piperExePath) {
+    Write-Host "==> Piper binary already installed, skipping." -ForegroundColor Green
+} else {
+    Write-Host "==> Fetching latest Piper release from GitHub..." -ForegroundColor Cyan
+
+    $releaseApi = "https://api.github.com/repos/rhasspy/piper/releases/latest"
+    $headers    = @{ "User-Agent" = "claude_voice-downloader" }
+
+    $release = Invoke-RestMethod -Uri $releaseApi -Headers $headers
+    Write-Host "    Version: $($release.tag_name)"
+
+    $winAsset = $release.assets |
+        Where-Object { $_.name -match "windows.*(amd64|x86_64)" } |
+        Select-Object -First 1
+
+    if (-not $winAsset) {
+        $winAsset = $release.assets |
+            Where-Object { $_.name -like "*windows*" -and $_.name -like "*.zip" } |
+            Select-Object -First 1
+    }
+
+    if (-not $winAsset) {
+        Write-Error "Could not locate a Windows release asset. Check https://github.com/rhasspy/piper/releases manually."
+        exit 1
+    }
+
+    Write-Host "    Asset  : $($winAsset.name)"
+
+    $tmpZip = Join-Path $env:TEMP "piper_windows_dl.zip"
+    Write-Host "    Downloading binary..."
+    Invoke-WebRequest -Uri $winAsset.browser_download_url -OutFile $tmpZip -UseBasicParsing
+
+    Write-Host "    Extracting..."
+    $tmpExtract = Join-Path $env:TEMP "piper_extract_$(Get-Random)"
+    Expand-Archive -Path $tmpZip -DestinationPath $tmpExtract -Force
+
+    $piperExeInZip = Get-ChildItem -Path $tmpExtract -Recurse -Filter "piper.exe" | Select-Object -First 1
+    if (-not $piperExeInZip) {
+        Write-Error "piper.exe not found inside the downloaded zip."
+        exit 1
+    }
+
+    Copy-Item -Path "$($piperExeInZip.DirectoryName)\*" -Destination $piperDir -Recurse -Force
+    Remove-Item $tmpExtract -Recurse -Force
+    Remove-Item $tmpZip -Force
+
+    Write-Host "    Installed to: $piperDir" -ForegroundColor Green
 }
 
 # ---------------------------------------------------------------------------
-# 2. Download Whisper model (for PTT speech-to-text)
+# 2. Piper voice models
 # ---------------------------------------------------------------------------
 Write-Host ""
-Write-Host "=== Step 2: Whisper (PTT) ===" -ForegroundColor Yellow
-& "$PSScriptRoot\download-whisper.ps1" -Model $WhisperModel
+Write-Host "=== Step 2: Piper voice models ===" -ForegroundColor Yellow
+
+foreach ($voice in $PiperVoices) {
+    if ($voice -notmatch '^([a-z]{2})_([A-Z]{2})-(.+)-(.+)$') {
+        Write-Warning "Skipping '$voice' — does not match expected pattern 'lang_REGION-name-quality'."
+        continue
+    }
+
+    $lang    = $Matches[1]
+    $region  = $Matches[2]
+    $name    = $Matches[3]
+    $quality = $Matches[4]
+
+    $hfBase = "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0"
+    $hfPath = "$hfBase/$lang/${lang}_${region}/$name/$quality"
+
+    foreach ($file in @("$voice.onnx", "$voice.onnx.json")) {
+        $dest = Join-Path $piperDir $file
+        if (Test-Path $dest) {
+            Write-Host "    Skipping $file (already exists)"
+        } else {
+            Write-Host "    Downloading $file..." -ForegroundColor Cyan
+            Invoke-WebRequest -Uri "$hfPath/$file" -OutFile $dest -UseBasicParsing
+        }
+    }
+}
+
+Write-Host "    Voice models ready." -ForegroundColor Green
 
 # ---------------------------------------------------------------------------
-# 3. Install (publish + copy to %LOCALAPPDATA%\ClaudeVoice\)
+# 3. Whisper model
 # ---------------------------------------------------------------------------
 Write-Host ""
-Write-Host "=== Step 3: Install ===" -ForegroundColor Yellow
+Write-Host "=== Step 3: Whisper (PTT) ===" -ForegroundColor Yellow
+
+$whisperDir  = Join-Path $PSScriptRoot "whisper"
+$whisperFile = Join-Path $whisperDir "ggml-$WhisperModel.bin"
+$whisperUrl  = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-$WhisperModel.bin"
+
+if (Test-Path $whisperFile) {
+    Write-Host "==> Whisper model already exists, skipping." -ForegroundColor Green
+} else {
+    New-Item -ItemType Directory -Force -Path $whisperDir | Out-Null
+    Write-Host "==> Downloading $WhisperModel model..." -ForegroundColor Cyan
+    $ProgressPreference = 'SilentlyContinue'
+    try {
+        Invoke-WebRequest -Uri $whisperUrl -OutFile $whisperFile -UseBasicParsing
+        $sizeMb = [math]::Round((Get-Item $whisperFile).Length / 1MB, 1)
+        Write-Host "    Done. ($sizeMb MB)" -ForegroundColor Green
+    } catch {
+        if (Test-Path $whisperFile) { Remove-Item $whisperFile }
+        Write-Error "Whisper download failed: $_"
+        exit 1
+    }
+}
+
+# ---------------------------------------------------------------------------
+# 4. Install
+# ---------------------------------------------------------------------------
+Write-Host ""
+Write-Host "=== Step 4: Install ===" -ForegroundColor Yellow
 & "$PSScriptRoot\install.ps1"
 
 # ---------------------------------------------------------------------------

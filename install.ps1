@@ -10,6 +10,66 @@ $projectDir = $PSScriptRoot
 $installDir = Join-Path $env:LOCALAPPDATA "ClaudeVoice"
 $startMenu  = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Claude Voice.lnk"
 $exePath    = Join-Path $installDir "claude_voice.exe"
+$icoPath    = Join-Path $projectDir "icon.ico"
+
+# --- 0. Generate icon if missing ---
+if (-not (Test-Path $icoPath)) {
+    $svgPath  = Join-Path $projectDir "icon.svg"
+    $inkscape = "C:\Program Files\Inkscape\bin\inkscape.exe"
+
+    if ((Test-Path $svgPath) -and (Test-Path $inkscape)) {
+        Write-Host "Generating icon.ico from icon.svg..."
+
+        $tmpDir  = Join-Path $env:TEMP "claude_voice_icon"
+        New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+
+        $sizes    = @(16, 32, 48, 256)
+        $pngBytes = @{}
+
+        foreach ($size in $sizes) {
+            $out = Join-Path $tmpDir "icon_${size}.png"
+            $proc = Start-Process -FilePath $inkscape `
+                -ArgumentList "--batch-process","--export-type=png","--export-width=$size","--export-height=$size","--export-filename=$out",$svgPath `
+                -Wait -PassThru -NoNewWindow
+            if (-not (Test-Path $out)) {
+                Write-Error "Inkscape failed to export ${size}x${size} (exit $($proc.ExitCode))"
+                exit 1
+            }
+            $pngBytes[$size] = [System.IO.File]::ReadAllBytes($out)
+        }
+
+        $headerSize = 6
+        $entrySize  = 16
+        $dataOffset = $headerSize + $entrySize * $sizes.Count
+        $ms         = New-Object System.IO.MemoryStream
+
+        function Write-UInt16($s, $v) { $s.Write([BitConverter]::GetBytes([uint16]$v), 0, 2) }
+        function Write-UInt32($s, $v) { $s.Write([BitConverter]::GetBytes([uint32]$v), 0, 4) }
+
+        Write-UInt16 $ms 0; Write-UInt16 $ms 1; Write-UInt16 $ms $sizes.Count
+
+        $offset = $dataOffset
+        foreach ($size in $sizes) {
+            $dim = if ($size -eq 256) { 0 } else { $size }
+            $ms.WriteByte([byte]$dim); $ms.WriteByte([byte]$dim)
+            $ms.WriteByte(0); $ms.WriteByte(0)
+            Write-UInt16 $ms 1; Write-UInt16 $ms 32
+            Write-UInt32 $ms $pngBytes[$size].Length
+            Write-UInt32 $ms $offset
+            $offset += $pngBytes[$size].Length
+        }
+
+        foreach ($size in $sizes) { $ms.Write($pngBytes[$size], 0, $pngBytes[$size].Length) }
+
+        [System.IO.File]::WriteAllBytes($icoPath, $ms.ToArray())
+        $ms.Dispose()
+        Remove-Item $tmpDir -Recurse -Force
+
+        Write-Host "    icon.ico generated." -ForegroundColor Green
+    } else {
+        Write-Warning "icon.ico not found and Inkscape is not available — build may fail if the project requires it."
+    }
+}
 
 # --- 1. Publish ---
 Write-Host "Publishing..."
@@ -43,9 +103,8 @@ if (Test-Path $piperSrc) {
 }
 
 # --- 4. Copy icon ---
-$iconSrc = Join-Path $projectDir "icon.ico"
-if (Test-Path $iconSrc) {
-    Copy-Item $iconSrc $installDir -Force
+if (Test-Path $icoPath) {
+    Copy-Item $icoPath $installDir -Force
 }
 
 # --- 5. Reset config.json from template (fresh install — no preserved settings) ---
