@@ -3,27 +3,43 @@
 .SYNOPSIS
     One-shot setup for new developers: downloads Piper + Whisper, then installs
     Claude Voice to %LOCALAPPDATA%\ClaudeVoice\ with a Start Menu shortcut.
-.PARAMETER PiperVoice
-    Piper voice to download (default: en_US-ryan-high).
-    Full list: https://rhasspy.github.io/piper-samples/
 .PARAMETER WhisperModel
     Whisper model to download (default: base.en, ~142 MB).
     Options: tiny.en (~75 MB), base.en (~142 MB), small.en (~466 MB)
 #>
 param(
-    [string]$PiperVoice   = "en_US-ryan-high",
     [string]$WhisperModel = "base.en"
+)
+
+# Voices to download. All will appear in the Settings > Voice dropdown.
+# Full list: https://rhasspy.github.io/piper-samples/
+$PiperVoices = @(
+    # --- Male (US) ---
+    "en_US-ryan-high",          # Primary — highest quality US male
+    "en_US-joe-medium",         # Alternate US male (warmer, more casual)
+    "en_US-arctic-medium",      # Alternate US male (multi-speaker, uses speaker 0)
+    "en_US-hfc_male-medium",    # Alternate US male
+
+    # --- Female (US) ---
+    "en_US-lessac-high",        # Best quality US female
+    "en_US-hfc_female-medium",  # Alternate US female
+
+    # --- Female (GB) ---
+    "en_GB-cori-high",          # Best quality British female
+    "en_GB-jenny_dioco-medium"  # Natural, conversational British female
 )
 
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
 # ---------------------------------------------------------------------------
-# 1. Download Piper TTS binary + voice model
+# 1. Download Piper TTS binary + voice models
 # ---------------------------------------------------------------------------
 Write-Host ""
 Write-Host "=== Step 1: Piper TTS ===" -ForegroundColor Yellow
-& "$PSScriptRoot\download-piper.ps1" -Voice $PiperVoice
+foreach ($voice in $PiperVoices) {
+    & "$PSScriptRoot\download-piper.ps1" -Voice $voice
+}
 
 # ---------------------------------------------------------------------------
 # 2. Download Whisper model (for PTT speech-to-text)
