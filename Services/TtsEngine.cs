@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.IO;
-using NAudio.Wave;
+using System.Media;
 using Windows.Media.SpeechSynthesis;
 using Windows.Storage.Streams;
 
@@ -25,9 +25,8 @@ public sealed class TtsEngine : IDisposable
 
     // -------------------------------------------------------------------------
     // Active playback — held so Stop() can cancel mid-sentence
-    private WaveOutEvent? _waveOut;
-    private readonly object _waveOutLock = new();
-    private bool _isFirstChunk = true;
+    private SoundPlayer? _player;
+    private readonly object _playerLock = new();
 
     // -------------------------------------------------------------------------
     // Shared
@@ -67,13 +66,13 @@ public sealed class TtsEngine : IDisposable
     /// <summary>Swaps the Piper voice model at runtime.</summary>
     public void ChangeVoice(string modelPath) => _piperModel = modelPath;
 
-    /// <summary>Call before each new response so the first chunk gets the device warm-up silence.</summary>
-    public void PrepareForNewResponse() => _isFirstChunk = true;
+    /// <summary>No-op — kept for call-site compatibility. Device stays warm via persistent WaveOutEvent.</summary>
+    public void PrepareForNewResponse() { }
 
     /// <summary>Immediately stops any audio currently playing.</summary>
     public void Stop()
     {
-        lock (_waveOutLock) { _waveOut?.Stop(); }
+        lock (_playerLock) { _player?.Stop(); }
     }
 
     /// <summary>Returns all voices visible to the WinRT SpeechSynthesizer (informational).</summary>
@@ -167,62 +166,48 @@ public sealed class TtsEngine : IDisposable
 
     private async Task PlayWavAsync(string wavFile, CancellationToken ct)
     {
-        // Prepend silence only on the first chunk of each response so the audio
-        // device warms up without adding gaps between subsequent chunks.
-        if (_isFirstChunk) { PrependSilence(wavFile, milliseconds: 150); _isFirstChunk = false; }
+        PrependSilence(wavFile, silenceMs: 200);
 
-        using var reader  = new AudioFileReader(wavFile);
-        using var waveOut = new WaveOutEvent();
+        using var player = new SoundPlayer(wavFile);
+        lock (_playerLock) { _player = player; }
 
-        lock (_waveOutLock) { _waveOut = waveOut; }
+        // SoundPlayer.PlaySync() is truly blocking — it doesn't return during
+        // punctuation pauses, so there's no spurious "playback done" signal
+        // mid-chunk. Run it on a background thread so we can cancel via Stop().
+        using var reg = ct.Register(() => { lock (_playerLock) { _player?.Stop(); } });
+        await Task.Run(() => player.PlaySync(), CancellationToken.None);
 
-        // Cancel immediately when token fires
-        ct.Register(() => { lock (_waveOutLock) { _waveOut?.Stop(); } });
-
-        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        waveOut.PlaybackStopped += (_, _) => tcs.TrySetResult();
-
-        waveOut.Init(reader);
-        waveOut.Play();
-
-        // Wait for the PlaybackStopped event rather than polling state,
-        // which can briefly flicker between buffer fills at punctuation pauses.
-        await tcs.Task;
-
-        lock (_waveOutLock) { if (_waveOut == waveOut) _waveOut = null; }
+        lock (_playerLock) { if (_player == player) _player = null; }
     }
 
     /// <summary>
-    /// Prepends <paramref name="milliseconds"/> ms of zero-filled PCM silence
-    /// to a WAV file by rewriting it in-place.
+    /// Prepends <paramref name="silenceMs"/> ms of zero-filled PCM silence to the WAV
+    /// file in-place. Handles the audio-device cold-start problem where Windows takes
+    /// ~150-200 ms to initialise the endpoint, which otherwise clips the first syllable.
     /// </summary>
-    private static void PrependSilence(string wavFile, int milliseconds)
+    private static void PrependSilence(string wavFile, int silenceMs)
     {
-        var original = File.ReadAllBytes(wavFile);
-        if (original.Length < 44) return; // invalid WAV
+        var wav = File.ReadAllBytes(wavFile);
+        if (wav.Length < 44) return;
 
-        // Parse sample rate, channels, bits-per-sample from the WAV header
-        int sampleRate    = BitConverter.ToInt32(original, 24);
-        short channels    = BitConverter.ToInt16(original, 22);
-        short bitsPerSamp = BitConverter.ToInt16(original, 34);
+        ushort channels      = BitConverter.ToUInt16(wav, 22);
+        uint   sampleRate    = BitConverter.ToUInt32(wav, 24);
+        ushort bitsPerSample = BitConverter.ToUInt16(wav, 34);
+        int    blockAlign    = channels * bitsPerSample / 8;
 
-        int silenceSamples = (int)(sampleRate * milliseconds / 1000.0);
-        int silenceBytes   = silenceSamples * channels * (bitsPerSamp / 8);
+        int silenceBytes = (int)(sampleRate * silenceMs / 1000) * blockAlign;
 
-        // Build new WAV: header (44 bytes) + silence + original audio data
-        var audioData    = original[44..];
-        var newAudioSize = audioData.Length + silenceBytes;
-        var output       = new byte[44 + newAudioSize];
+        uint newDataSize = BitConverter.ToUInt32(wav, 40) + (uint)silenceBytes;
+        uint newRiffSize = (uint)(wav.Length - 8 + silenceBytes);
 
-        System.Buffer.BlockCopy(original, 0, output, 0, 44); // copy header
-        // silence bytes are already zero
-        System.Buffer.BlockCopy(audioData, 0, output, 44 + silenceBytes, audioData.Length);
+        var result = new byte[wav.Length + silenceBytes];
+        Array.Copy(wav, result, 44);
+        BitConverter.GetBytes(newRiffSize).CopyTo(result, 4);
+        BitConverter.GetBytes(newDataSize).CopyTo(result, 40);
+        // bytes 44..(44+silenceBytes-1) are already zero — silence
+        Array.Copy(wav, 44, result, 44 + silenceBytes, wav.Length - 44);
 
-        // Update the chunk size fields in the header
-        BitConverter.TryWriteBytes(output.AsSpan(4),  (uint)(output.Length - 8));
-        BitConverter.TryWriteBytes(output.AsSpan(40), (uint)newAudioSize);
-
-        File.WriteAllBytes(wavFile, output);
+        File.WriteAllBytes(wavFile, result);
     }
 
     // -------------------------------------------------------------------------
@@ -257,6 +242,9 @@ public sealed class TtsEngine : IDisposable
         text = System.Text.RegularExpressions.Regex.Replace(text, @"^[ \t]*[-*]\s+(.+?)[ \t]*$", "$1,", ML);
         text = System.Text.RegularExpressions.Regex.Replace(text, @"([.!?:;]),", "$1"); // fix double-punct
         text = System.Text.RegularExpressions.Regex.Replace(text, @"`([^`\r\n]+)`", "$1");
+        // Expand acronyms so Piper spells them out: XML → X M L, UI → U I
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\b([A-Z]{2,})\b",
+            m => string.Join(" ", m.Value.ToCharArray()));
         text = text.Replace("\"", "");
         text = text.Replace("(", ", ").Replace(")", ", ");
         text = System.Text.RegularExpressions.Regex.Replace(text, @"\.[/\\]", " ");
