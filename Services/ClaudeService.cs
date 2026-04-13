@@ -17,11 +17,50 @@ public sealed class ClaudeService
         "unintelligible audio, someone talking to someone else, a TV or radio in the background, " +
         "etc.), ignore it completely and reply with nothing — an empty response.";
 
-    public string SystemPrompt  { get; set; }
-    public string AssistantName { get; set; } = "Claude";
+    public string SystemPrompt     { get; set; }
+    public string AssistantName    { get; set; } = "Claude";
 
-    private string EffectiveSystemPrompt =>
-        $"Your name is {AssistantName}.\n\n{SystemPrompt}\n\n{HiddenSystemPrompt}";
+    /// <summary>
+    /// BCP-47 language code the user is speaking in (e.g. "en", "es").
+    /// When non-English, a hidden instruction tells the model to reply in that language.
+    /// </summary>
+    public string ResponseLanguage { get; set; } = "en";
+
+    private static readonly Dictionary<string, string> _languageNames = new()
+    {
+        ["es"] = "Spanish",
+        ["fr"] = "French",
+        ["de"] = "German",
+        ["pt"] = "Portuguese",
+        ["it"] = "Italian",
+        ["ja"] = "Japanese",
+        ["zh"] = "Chinese",
+        ["ko"] = "Korean",
+        ["ru"] = "Russian",
+        ["ar"] = "Arabic",
+        ["nl"] = "Dutch",
+        ["pl"] = "Polish",
+        ["sv"] = "Swedish",
+        ["tr"] = "Turkish",
+        ["hi"] = "Hindi",
+    };
+
+    private string EffectiveSystemPrompt
+    {
+        get
+        {
+            var sb = new StringBuilder();
+            sb.Append($"Your name is {AssistantName}.\n\n");
+            sb.Append(SystemPrompt);
+            sb.Append($"\n\n{HiddenSystemPrompt}");
+            if (ResponseLanguage != "en" &&
+                _languageNames.TryGetValue(ResponseLanguage, out var langName))
+            {
+                sb.Append($"\n\nThe user is speaking {langName}. Always respond in {langName}.");
+            }
+            return sb.ToString();
+        }
+    }
 
     /// <summary>
     /// Optional callback invoked with status strings (e.g. "Searching...") during

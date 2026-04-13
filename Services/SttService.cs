@@ -9,6 +9,13 @@ public sealed class SttService : IDisposable
 {
     private WhisperFactory _factory;
     private bool           _isEnglishOnly;
+
+    /// <summary>
+    /// BCP-47 language code passed to the Whisper processor ("en", "es", etc.).
+    /// Set to "auto" to let the model detect the language from audio.
+    /// Ignored for English-only models — they always use "en".
+    /// </summary>
+    public string Language { get; set; } = "auto";
     private WaveInEvent?   _waveIn;
     private WaveFileWriter? _waveWriter;
     private string          _tempFile = "";
@@ -100,9 +107,10 @@ public sealed class SttService : IDisposable
             const long MinAudioBytes = 44 + 16_000;
             if (new FileInfo(_tempFile).Length < MinAudioBytes) return "";
 
-            // English-only models need the language hint; multilingual models auto-detect.
+            // English-only models always force "en"; multilingual use the Language property.
+            var lang    = _isEnglishOnly ? "en" : Language;
             var builder = _factory.CreateBuilder();
-            if (_isEnglishOnly) builder = builder.WithLanguage("en");
+            if (lang != "auto") builder = builder.WithLanguage(lang);
             using var processor = builder.Build();
 
             await using var stream = File.OpenRead(_tempFile);

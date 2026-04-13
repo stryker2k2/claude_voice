@@ -123,6 +123,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         try { _stt = new SttService(ResolveModelPath(AppConfig.WhisperPathFromKey(_config.WhisperModelKey))); }
         catch (FileNotFoundException ex) { _initWarning = ex.Message; }
 
+        // Sync Whisper model + language to the configured voice on startup
+        if (_stt is not null && _config.PiperModel is not null)
+            SyncSttToVoice(_config.PiperModel);
+
         if (_stt is not null)
         {
             int _meterTick = 0;
@@ -496,7 +500,6 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             _config.AnthropicApiKey, _claude.SystemPrompt, voices, currentModel,
             _config.PttKey ?? "F5", _config.WakeWord, _config.AssistantName,
             _config.EnableMemory, _config.EnableWebSearch, _config.SilenceTimeout, _config.VoiceThresholdDb, _config.WakeSound,
-            _config.WhisperModelKey,
             wipeMemoryAction: () =>
             {
                 _memory.Wipe();
@@ -509,7 +512,11 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             {
                 _tts.Stop();
                 _tts.ChangeVoice(modelPath);
-                _ = _tts.SpeakAsync("Hello, I am the voice for your Personal Assistant.");
+                var fileName = Path.GetFileName(modelPath);
+                var previewText = fileName.StartsWith("es_", StringComparison.OrdinalIgnoreCase)
+                    ? "Hola, yo soy tu asistente de voz personal."
+                    : "Hello, I am the voice for your Personal Assistant.";
+                _ = _tts.SpeakAsync(previewText);
             });
     }
 
@@ -526,7 +533,10 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
         var newModel = vm.SelectedVoice?.FullPath ?? _config.PiperModel ?? "";
         if (!string.IsNullOrEmpty(newModel))
+        {
             _tts.ChangeVoice(newModel);
+            SyncSttToVoice(newModel);
+        }
 
         PttKey = Enum.TryParse<Key>(vm.PttKey, ignoreCase: true, out var k) ? k : PttKey;
 
@@ -534,26 +544,11 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         var wakeWordChanged = !string.Equals(vm.WakeWord, _config.WakeWord,
             StringComparison.OrdinalIgnoreCase);
 
-        var newWhisperKey = vm.SelectedWhisperModel?.Key ?? _config.WhisperModelKey;
-        if (newWhisperKey != _config.WhisperModelKey && _stt is not null)
-        {
-            try
-            {
-                var newWhisperPath = ResolveModelPath(AppConfig.WhisperPathFromKey(newWhisperKey));
-                _stt.ChangeModel(newWhisperPath);
-            }
-            catch (Exception ex)
-            {
-                SetStatus($"Could not load Whisper model '{newWhisperKey}': {ex.Message}", StatusKind.Error);
-                newWhisperKey = _config.WhisperModelKey; // revert key if swap failed
-            }
-        }
-
         _config = new AppConfig
         {
             AnthropicApiKey  = string.IsNullOrWhiteSpace(vm.ApiKey) ? _config.AnthropicApiKey : vm.ApiKey,
             WhisperModel     = _config.WhisperModel,
-            WhisperModelKey  = newWhisperKey,
+            WhisperModelKey  = WhisperKeyForVoice(newModel),
             PiperExe         = _config.PiperExe,
             PiperModel       = ToRelativePath(newModel),
             TtsRate          = _config.TtsRate,
@@ -840,6 +835,38 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     private void RaiseCanExecute() => CommandManager.InvalidateRequerySuggested();
 
+    /// <summary>
+    /// Syncs both the Whisper language hint and the loaded model to match the selected Piper voice.
+    /// English voices → base.en model + "en" hint; any other language → base model + language code.
+    /// </summary>
+    private void SyncSttToVoice(string voicePath)
+    {
+        if (_stt is null) return;
+        var file       = Path.GetFileName(voicePath);
+        var underscore = file.IndexOf('_');
+        if (underscore <= 0) return;
+
+        var langCode          = file[..underscore].ToLowerInvariant(); // "en", "es", etc.
+        _stt.Language         = langCode;
+        _claude.ResponseLanguage = langCode;
+
+        var neededKey  = WhisperKeyForVoice(voicePath);
+        if (neededKey == _config.WhisperModelKey) return;
+
+        try   { _stt.ChangeModel(ResolveModelPath(AppConfig.WhisperPathFromKey(neededKey))); }
+        catch (Exception ex)
+            { SetStatus($"Could not load Whisper model '{neededKey}': {ex.Message}", StatusKind.Error); }
+    }
+
+    /// <summary>Returns the Whisper model key that best matches the given voice path.</summary>
+    private static string WhisperKeyForVoice(string voicePath)
+    {
+        var file       = Path.GetFileName(voicePath);
+        var underscore = file.IndexOf('_');
+        if (underscore <= 0) return "base.en";
+        return file[..underscore].Equals("en", StringComparison.OrdinalIgnoreCase) ? "base.en" : "base";
+    }
+
     private static IReadOnlyList<VoiceOption> ScanPiperVoices()
     {
         var piperDir = Path.Combine(AppContext.BaseDirectory, "piper");
@@ -856,13 +883,22 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
     private static string FriendlyName(string path)
     {
-        var name = Path.GetFileNameWithoutExtension(path);
-        var dash = name.IndexOf('-');
-        if (dash >= 0) name = name[(dash + 1)..];
+        // Filename format: lang_REGION-name-quality.onnx  (e.g. en_US-ryan-high.onnx)
+        var name  = Path.GetFileNameWithoutExtension(path); // "en_US-ryan-high"
+        var dash  = name.IndexOf('-');
+        var prefix = dash >= 0 ? name[..dash] : "";         // "en_US"
+        if (dash >= 0) name = name[(dash + 1)..];           // "ryan-high"
+
+        // Extract region from "lang_REGION"
+        var underscore = prefix.IndexOf('_');
+        var region = underscore >= 0 ? prefix[(underscore + 1)..] : "";
+
         var parts = name.Split('-');
-        return parts.Length >= 2
+        var label = parts.Length >= 2
             ? $"{char.ToUpper(parts[0][0])}{parts[0][1..]} ({char.ToUpper(parts[1][0])}{parts[1][1..]})"
             : char.ToUpper(name[0]) + name[1..];
+
+        return string.IsNullOrEmpty(region) ? label : $"{label} [{region}]";
     }
 
     private static string ResolveModelPath(string configured)

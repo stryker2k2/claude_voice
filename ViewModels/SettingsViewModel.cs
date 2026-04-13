@@ -9,8 +9,6 @@ namespace claude_voice;
 /// <summary>A Piper voice available on disk.</summary>
 public record VoiceOption(string DisplayName, string FullPath);
 
-/// <summary>A Whisper model option shown in the Speech Recognition dropdown.</summary>
-public record WhisperModelOption(string Key, string DisplayName);
 
 public sealed class SettingsViewModel : ViewModelBase
 {
@@ -25,7 +23,6 @@ public sealed class SettingsViewModel : ViewModelBase
     private double       _silenceTimeout   = 4.0;
     private double       _voiceThresholdDb = -30.0;
     private string       _wakeSound        = "Quindar";
-    private WhisperModelOption? _selectedWhisperModel;
 
     public string       ApiKey          { get => _apiKey;          set => SetField(ref _apiKey, value); }
     public string       SystemPrompt    { get => _systemPrompt;    set => SetField(ref _systemPrompt, value); }
@@ -46,18 +43,6 @@ public sealed class SettingsViewModel : ViewModelBase
     public double       SilenceTimeout    { get => _silenceTimeout;    set => SetField(ref _silenceTimeout, value); }
     public double       VoiceThresholdDb  { get => _voiceThresholdDb;  set => SetField(ref _voiceThresholdDb, value); }
     public string       WakeSound         { get => _wakeSound;         set => SetField(ref _wakeSound, value); }
-
-    public WhisperModelOption? SelectedWhisperModel
-    {
-        get => _selectedWhisperModel;
-        set => SetField(ref _selectedWhisperModel, value);
-    }
-
-    public static IReadOnlyList<WhisperModelOption> WhisperModelOptions { get; } =
-    [
-        new("base.en", "English only  (base.en, ~142 MB)"),
-        new("base",    "Multilingual  (base, ~142 MB)"),
-    ];
 
     public static IReadOnlyList<string> WakeSoundOptions { get; } =
     [
@@ -100,7 +85,6 @@ public sealed class SettingsViewModel : ViewModelBase
         double silenceTimeout,
         double voiceThresholdDb,
         string wakeSound,
-        string whisperModelKey,
         Action wipeMemoryAction,
         Action<string>? previewVoice = null)
     {
@@ -114,8 +98,6 @@ public sealed class SettingsViewModel : ViewModelBase
         _silenceTimeout   = silenceTimeout;
         _voiceThresholdDb = voiceThresholdDb;
         _wakeSound        = WakeSoundOptions.Contains(wakeSound) ? wakeSound : "Quindar";
-        _selectedWhisperModel = WhisperModelOptions.FirstOrDefault(o => o.Key == whisperModelKey)
-            ?? WhisperModelOptions[0];
         AvailableVoices   = voices;
         OriginalVoicePath = currentVoicePath;
         _previewVoice     = previewVoice;

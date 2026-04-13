@@ -201,48 +201,20 @@
                         </StackPanel>
                     </Grid>
 
-                    <!-- Wake Word + Speech Recognition (2-col) -->
-                    <Grid Grid.Row="2">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="12"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-
-                        <StackPanel Grid.Column="0">
-                            <TextBlock Text="Wake Word"
-                                       Foreground="#D4D4D4" FontFamily="Segoe UI"
-                                       FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                            <TextBox Text="{Binding WakeWord, UpdateSourceTrigger=PropertyChanged}"
-                                     Background="#252526" Foreground="#D4D4D4" CaretBrush="#D4D4D4"
-                                     BorderBrush="#3C3C3C" BorderThickness="1"
-                                     FontFamily="Segoe UI" FontSize="13"
-                                     Padding="8,6"/>
-                            <TextBlock Text="e.g. &quot;hey ryan&quot;"
-                                       Foreground="#666666" FontFamily="Segoe UI" FontSize="10"
-                                       Margin="2,3,0,0"/>
-                        </StackPanel>
-
-                        <StackPanel Grid.Column="2">
-                            <TextBlock Text="Speech Recognition"
-                                       Foreground="#D4D4D4" FontFamily="Segoe UI"
-                                       FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
-                            <ComboBox Style="{StaticResource DarkComboBox}"
-                                      ItemContainerStyle="{StaticResource DarkComboBoxItem}"
-                                      ItemsSource="{Binding WhisperModelOptions, Mode=OneTime}"
-                                      SelectedItem="{Binding SelectedWhisperModel}"
-                                      ToolTip="English-only is slightly more accurate for English; Multilingual supports Spanish and 98 other languages">
-                                <ComboBox.ItemTemplate>
-                                    <DataTemplate>
-                                        <TextBlock Text="{Binding DisplayName}"/>
-                                    </DataTemplate>
-                                </ComboBox.ItemTemplate>
-                            </ComboBox>
-                            <TextBlock Text="Run setup.ps1 to download both models."
-                                       Foreground="#666666" FontFamily="Segoe UI" FontSize="10"
-                                       Margin="2,3,0,0"/>
-                        </StackPanel>
-                    </Grid>
+                    <!-- Wake Word (full width) -->
+                    <StackPanel Grid.Row="2">
+                        <TextBlock Text="Wake Word"
+                                   Foreground="#D4D4D4" FontFamily="Segoe UI"
+                                   FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                        <TextBox Text="{Binding WakeWord, UpdateSourceTrigger=PropertyChanged}"
+                                 Background="#252526" Foreground="#D4D4D4" CaretBrush="#D4D4D4"
+                                 BorderBrush="#3C3C3C" BorderThickness="1"
+                                 FontFamily="Segoe UI" FontSize="13"
+                                 Padding="8,6"/>
+                        <TextBlock Text="e.g. &quot;hey ryan&quot;"
+                                   Foreground="#666666" FontFamily="Segoe UI" FontSize="10"
+                                   Margin="2,3,0,0"/>
+                    </StackPanel>
 
                     <!-- Silence timeout label -->
                     <TextBlock Grid.Row="4" Text="Pause Before Sending &amp; Conversation Wait"
