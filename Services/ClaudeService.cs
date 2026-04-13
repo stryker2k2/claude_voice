@@ -17,9 +17,11 @@ public sealed class ClaudeService
         "unintelligible audio, someone talking to someone else, a TV or radio in the background, " +
         "etc.), ignore it completely and reply with nothing — an empty response.";
 
-    public string SystemPrompt { get; set; }
+    public string SystemPrompt  { get; set; }
+    public string AssistantName { get; set; } = "Claude";
 
-    private string EffectiveSystemPrompt => $"{SystemPrompt}\n\n{HiddenSystemPrompt}";
+    private string EffectiveSystemPrompt =>
+        $"Your name is {AssistantName}.\n\n{SystemPrompt}\n\n{HiddenSystemPrompt}";
 
     /// <summary>
     /// Optional callback invoked with status strings (e.g. "Searching...") during
@@ -137,8 +139,10 @@ public sealed class ClaudeService
                 // so the flag is always set correctly before any delta arrives.
                 if (ev.TryPickContentBlockStart(out var blockStart))
                 {
+                    bool wasSearching = isSearching;
                     isSearching = blockStart.ContentBlock.TryPickBetaServerToolUse(out _);
-                    if (isSearching) OnStatusUpdate?.Invoke("Searching...");
+                    if (isSearching)       OnStatusUpdate?.Invoke("Searching...");
+                    else if (wasSearching) OnStatusUpdate?.Invoke("Talking...");
                 }
 
                 // Only forward text deltas to TTS — skip all search metadata

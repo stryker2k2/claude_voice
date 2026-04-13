@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Windows.Input;
+using System.Windows.Threading;
 
 namespace claude_voice;
 
@@ -24,7 +25,15 @@ public sealed class SettingsViewModel : ViewModelBase
 
     public string       ApiKey          { get => _apiKey;          set => SetField(ref _apiKey, value); }
     public string       SystemPrompt    { get => _systemPrompt;    set => SetField(ref _systemPrompt, value); }
-    public VoiceOption? SelectedVoice   { get => _selectedVoice;   set => SetField(ref _selectedVoice, value); }
+    public VoiceOption? SelectedVoice
+    {
+        get => _selectedVoice;
+        set
+        {
+            if (SetField(ref _selectedVoice, value) && value is not null)
+                _previewVoice?.Invoke(value.FullPath);
+        }
+    }
     public string       PttKey          { get => _pttKey;          set => SetField(ref _pttKey, value); }
     public string       WakeWord        { get => _wakeWord;        set => SetField(ref _wakeWord, value); }
     public string       AssistantName   { get => _assistantName;   set => SetField(ref _assistantName, value); }
@@ -50,9 +59,17 @@ public sealed class SettingsViewModel : ViewModelBase
 
     public string ConfigPath { get; } = AppConfig.LoadedPath;
 
+    private bool _isWiped;
+    public bool IsWiped { get => _isWiped; private set => SetField(ref _isWiped, value); }
+
     public ICommand WipeMemoryCommand { get; }
 
     public IReadOnlyList<VoiceOption> AvailableVoices { get; }
+
+    /// <summary>Model path that was active when the Settings dialog opened — used to restore on Cancel.</summary>
+    public string OriginalVoicePath { get; }
+
+    private readonly Action<string>? _previewVoice;
 
     public SettingsViewModel(
         string apiKey,
@@ -67,7 +84,8 @@ public sealed class SettingsViewModel : ViewModelBase
         double silenceTimeout,
         double voiceThresholdDb,
         string wakeSound,
-        Action wipeMemoryAction)
+        Action wipeMemoryAction,
+        Action<string>? previewVoice = null)
     {
         _apiKey           = apiKey;
         _systemPrompt     = systemPrompt;
@@ -79,8 +97,18 @@ public sealed class SettingsViewModel : ViewModelBase
         _silenceTimeout   = silenceTimeout;
         _voiceThresholdDb = voiceThresholdDb;
         _wakeSound        = WakeSoundOptions.Contains(wakeSound) ? wakeSound : "Quindar";
-        AvailableVoices = voices;
-        WipeMemoryCommand = new RelayCommand(wipeMemoryAction);
+        AvailableVoices   = voices;
+        OriginalVoicePath = currentVoicePath;
+        _previewVoice     = previewVoice;
+        WipeMemoryCommand = new RelayCommand(() =>
+        {
+            if (IsWiped) return;
+            wipeMemoryAction();
+            IsWiped = true;
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+            timer.Tick += (_, _) => { timer.Stop(); IsWiped = false; };
+            timer.Start();
+        });
 
         var currentFile = Path.GetFileName(currentVoicePath);
         _selectedVoice  = voices.FirstOrDefault(v =>

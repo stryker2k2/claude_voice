@@ -78,27 +78,54 @@
                                                        FontFamily="Segoe UI" FontSize="14"
                                                        Foreground="#D4D4D4" TextWrapping="Wrap"/>
                                         </StackPanel>
-                                        <!-- Copy button — visible on bubble hover -->
-                                        <Button Content="&#xE8C8;"
-                                                VerticalAlignment="Top" HorizontalAlignment="Right"
-                                                Width="22" Height="22" Padding="0"
-                                                FontFamily="Segoe MDL2 Assets" FontSize="12"
-                                                Background="Transparent" BorderThickness="0"
-                                                Foreground="#888888" Cursor="Hand"
-                                                ToolTip="Copy to clipboard"
-                                                Tag="{Binding Text}"
-                                                Click="CopyMessage_Click">
-                                            <Button.Style>
-                                                <Style TargetType="Button">
-                                                    <Setter Property="Visibility" Value="Collapsed"/>
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Border}}" Value="True">
-                                                            <Setter Property="Visibility" Value="Visible"/>
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Button.Style>
-                                        </Button>
+                                        <!-- Bubble action buttons — visible on hover -->
+                                        <StackPanel Orientation="Horizontal"
+                                                    VerticalAlignment="Top" HorizontalAlignment="Right">
+                                            <!-- Replay button — assistant bubbles only -->
+                                            <Button Content="&#xE767;"
+                                                    Width="22" Height="22" Padding="0"
+                                                    FontFamily="Segoe MDL2 Assets" FontSize="12"
+                                                    Background="Transparent" BorderThickness="0"
+                                                    Foreground="#888888" Cursor="Hand"
+                                                    ToolTip="Replay audio"
+                                                    Tag="{Binding Text}"
+                                                    Click="ReplayMessage_Click">
+                                                <Button.Style>
+                                                    <Style TargetType="Button">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <MultiDataTrigger>
+                                                                <MultiDataTrigger.Conditions>
+                                                                    <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Border}}" Value="True"/>
+                                                                    <Condition Binding="{Binding IsAssistant}" Value="True"/>
+                                                                </MultiDataTrigger.Conditions>
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </MultiDataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+                                            <!-- Copy button -->
+                                            <Button Content="&#xE8C8;"
+                                                    Width="22" Height="22" Padding="0"
+                                                    FontFamily="Segoe MDL2 Assets" FontSize="12"
+                                                    Background="Transparent" BorderThickness="0"
+                                                    Foreground="#888888" Cursor="Hand"
+                                                    ToolTip="Copy to clipboard"
+                                                    Tag="{Binding Text}"
+                                                    Click="CopyMessage_Click">
+                                                <Button.Style>
+                                                    <Style TargetType="Button">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Border}}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+                                        </StackPanel>
                                     </Grid>
                                 </Border>
                             </Grid>

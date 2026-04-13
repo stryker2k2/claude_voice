@@ -96,7 +96,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public MainViewModel()
     {
         _config = AppConfig.Load();
-        _claude = new ClaudeService(_config.AnthropicApiKey, _config.SystemPrompt, _config.EnableWebSearch);
+        _claude = new ClaudeService(_config.AnthropicApiKey, _config.SystemPrompt, _config.EnableWebSearch)
+            { AssistantName = _config.AssistantName };
         _claude.OnStatusUpdate = status =>
             Application.Current.Dispatcher.Invoke(() => SetStatus(status, StatusKind.Busy));
         _tts    = new TtsEngine(_config);
@@ -106,7 +107,16 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         {
             _memoryEntries.AddRange(_memory.Load());
             if (_memoryEntries.Count > 0)
+            {
                 _claude.LoadHistory(_memoryEntries);
+                foreach (var entry in _memoryEntries.TakeLast(6))
+                    Messages.Add(new ChatMessage
+                    {
+                        Role        = entry.Role,
+                        DisplayName = entry.Role == "user" ? "You" : _config.AssistantName,
+                        Text        = entry.Content
+                    });
+            }
         }
 
         try { _stt = new SttService(ResolveModelPath(_config.WhisperModel)); }
@@ -143,6 +153,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     {
         if (_initWarning is not null)
             WarningRaised?.Invoke(this, _initWarning);
+        if (Messages.Count > 0)
+            ScrollRequested?.Invoke(this, EventArgs.Empty);
     }
 
     // -------------------------------------------------------------------------
@@ -256,7 +268,12 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             if (hitMax) AddSystemNote("— recording limit reached, message sent —");
 
             if (!string.IsNullOrWhiteSpace(text) && !IsNoiseTranscription(text))
-                await SendCoreAsync(text);
+            {
+                if (System.Text.RegularExpressions.Regex.IsMatch(text.Trim(), @"^(cancel|stop).?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                    StopWakeWord();
+                else
+                    await SendCoreAsync(text);
+            }
             else
             {
                 // No usable speech — resume wake word listening if active, else go ready
@@ -483,12 +500,24 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                 _memory.Wipe();
                 _memoryEntries.Clear();
                 _claude.ClearHistory();
+                Messages.Clear();
+                AddSystemNote("Memory wiped.");
+            },
+            previewVoice: modelPath =>
+            {
+                _tts.Stop();
+                _tts.ChangeVoice(modelPath);
+                _ = _tts.SpeakAsync("Hello, I am the voice for your Personal Assistant.");
             });
     }
 
+    /// <summary>Restores the TTS voice to what it was before the Settings dialog opened.</summary>
+    public void CancelSettings(string originalVoicePath) => _tts.ChangeVoice(originalVoicePath);
+
     public void ApplySettings(SettingsViewModel vm)
     {
-        _claude.SystemPrompt = vm.SystemPrompt;
+        _claude.SystemPrompt  = vm.SystemPrompt;
+        _claude.AssistantName = vm.AssistantName;
         _claude.SetWebSearch(vm.EnableWebSearch);
         if (!string.IsNullOrWhiteSpace(vm.ApiKey))
             _claude.SetApiKey(vm.ApiKey);
@@ -895,6 +924,11 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
 
             if (!string.IsNullOrWhiteSpace(text) && !IsNoiseTranscription(text))
             {
+                if (System.Text.RegularExpressions.Regex.IsMatch(text.Trim(), @"^(cancel|stop).?$", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                {
+                    Application.Current.Dispatcher.Invoke(StopWakeWord);
+                    return;
+                }
                 // Keep conversation going — SendCoreAsync will handle TTS and loop back here
                 await SendCoreAsync(text);
                 return;
@@ -933,6 +967,22 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _ttsCts = null;
         _tts.Stop();
         IsSpeaking = false;
+    }
+
+    public void ReplaySpeech(string text)
+    {
+        StopSpeaking();
+        _ttsCts = new CancellationTokenSource();
+        var ct = _ttsCts.Token;
+        IsSpeaking = true;
+        SetStatus("Talking...", StatusKind.Busy);
+        _ = Task.Run(async () =>
+        {
+            try   { await _tts.SpeakAsync(text, ct); }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { AddSystemNote($"Replay error: {ex.Message}"); }
+            finally { await ResumeAfterSpeakingAsync(); }
+        });
     }
 
     public void Dispose()

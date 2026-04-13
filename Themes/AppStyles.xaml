@@ -63,6 +63,36 @@
     </Style>
 
     <!-- =====================================================================
+         Button (no-hover variant) — same template but without IsMouseOver trigger.
+         Use for buttons whose background conveys state on its own (e.g. Wipe/Done).
+         ===================================================================== -->
+    <Style x:Key="NoHoverButton" TargetType="Button">
+        <Setter Property="Foreground"          Value="#D4D4D4"/>
+        <Setter Property="BorderThickness"     Value="1"/>
+        <Setter Property="FontFamily"          Value="Segoe UI"/>
+        <Setter Property="Cursor"              Value="Hand"/>
+        <Setter Property="SnapsToDevicePixels" Value="True"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="border"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="2"
+                            SnapsToDevicePixels="True">
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                          Margin="{TemplateBinding Padding}"
+                                          TextElement.Foreground="{TemplateBinding Foreground}"
+                                          RecognizesAccessKey="True"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- =====================================================================
          ComboBox — ToggleButton (the closed face)
          ===================================================================== -->
     <Style x:Key="DarkComboBoxToggleButton" TargetType="{x:Type ToggleButton}">

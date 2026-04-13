@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.IO;
-using System.Media;
+using NAudio.Wave;
 using Windows.Media.SpeechSynthesis;
 using Windows.Storage.Streams;
 
@@ -25,8 +25,8 @@ public sealed class TtsEngine : IDisposable
 
     // -------------------------------------------------------------------------
     // Active playback — held so Stop() can cancel mid-sentence
-    private SoundPlayer? _player;
-    private readonly object _playerLock = new();
+    private WaveOutEvent? _waveOut;
+    private readonly object _waveOutLock = new();
 
     // -------------------------------------------------------------------------
     // Shared
@@ -34,6 +34,8 @@ public sealed class TtsEngine : IDisposable
         _usePiper
             ? $"Piper: {Path.GetFileNameWithoutExtension(_piperModel)}"
             : _synth.Voice.DisplayName;
+
+    public string CurrentModelPath => _piperModel;
 
     public TtsEngine(AppConfig config)
     {
@@ -72,7 +74,7 @@ public sealed class TtsEngine : IDisposable
     /// <summary>Immediately stops any audio currently playing.</summary>
     public void Stop()
     {
-        lock (_playerLock) { _player?.Stop(); }
+        lock (_waveOutLock) { _waveOut?.Stop(); }
     }
 
     /// <summary>Returns all voices visible to the WinRT SpeechSynthesizer (informational).</summary>
@@ -168,16 +170,30 @@ public sealed class TtsEngine : IDisposable
     {
         PrependSilence(wavFile, silenceMs: 200);
 
-        using var player = new SoundPlayer(wavFile);
-        lock (_playerLock) { _player = player; }
+        using var reader  = new AudioFileReader(wavFile);
+        using var waveOut = new WaveOutEvent();
 
-        // SoundPlayer.PlaySync() is truly blocking — it doesn't return during
-        // punctuation pauses, so there's no spurious "playback done" signal
-        // mid-chunk. Run it on a background thread so we can cancel via Stop().
-        using var reg = ct.Register(() => { lock (_playerLock) { _player?.Stop(); } });
-        await Task.Run(() => player.PlaySync(), CancellationToken.None);
+        lock (_waveOutLock) { _waveOut = waveOut; }
 
-        lock (_playerLock) { if (_player == player) _player = null; }
+        waveOut.Init(reader);
+        waveOut.Play();
+
+        try
+        {
+            // Poll PlaybackState — reliable across punctuation pauses where
+            // the PlaybackStopped event fires spuriously between buffer fills.
+            while (waveOut.PlaybackState != PlaybackState.Stopped)
+                await Task.Delay(50, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            waveOut.Stop();
+            throw;
+        }
+        finally
+        {
+            lock (_waveOutLock) { if (_waveOut == waveOut) _waveOut = null; }
+        }
     }
 
     /// <summary>

@@ -67,7 +67,7 @@ if (-not (Test-Path $icoPath)) {
 
         Write-Host "    icon.ico generated." -ForegroundColor Green
     } else {
-        Write-Warning "icon.ico not found and Inkscape is not available — build may fail if the project requires it."
+        Write-Warning "icon.ico not found and Inkscape is not available - build may fail if the project requires it."
     }
 }
 
@@ -107,7 +107,7 @@ if (Test-Path $icoPath) {
     Copy-Item $icoPath $installDir -Force
 }
 
-# --- 5. Reset config.json from template (fresh install — no preserved settings) ---
+# --- 5. Reset config.json from template (fresh install - no preserved settings) ---
 $configDst     = Join-Path $installDir "config.json"
 $configExample = Join-Path $projectDir "config.example.json"
 if (Test-Path $configExample) {

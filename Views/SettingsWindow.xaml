@@ -139,12 +139,28 @@
                            FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
                 <DockPanel>
                     <Button DockPanel.Dock="Right"
-                            Content="Wipe" Command="{Binding WipeMemoryCommand}"
+                            Command="{Binding WipeMemoryCommand}"
                             Width="60" Height="26"
-                            Background="#5A1A1A" Foreground="#D4D4D4"
-                            BorderBrush="#8B2222" BorderThickness="1"
+                            Foreground="#D4D4D4" BorderThickness="1"
                             FontFamily="Segoe UI" FontSize="12"
-                            Cursor="Hand" ToolTip="Erase all remembered conversations"/>
+                            Cursor="Hand" ToolTip="Erase all remembered conversations">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource NoHoverButton}">
+                                <Setter Property="Content"     Value="Wipe"/>
+                                <Setter Property="Background"  Value="#5A1A1A"/>
+                                <Setter Property="BorderBrush" Value="#8B2222"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsWiped}" Value="True">
+                                        <Setter Property="Content"          Value="Done"/>
+                                        <Setter Property="Background"       Value="#1A5A2A"/>
+                                        <Setter Property="BorderBrush"      Value="#2ECC71"/>
+                                        <Setter Property="IsHitTestVisible" Value="False"/>
+                                        <Setter Property="Cursor"           Value="Arrow"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
                     <CheckBox IsChecked="{Binding EnableMemory}"
                               Content="Remember sessions"
                               Foreground="#D4D4D4" FontFamily="Segoe UI" FontSize="13"

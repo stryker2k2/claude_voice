@@ -75,6 +75,15 @@ public partial class MainWindow : Window
     }
 
     // -------------------------------------------------------------------------
+    // Replay message via TTS
+
+    private void ReplayMessage_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.Button btn && btn.Tag is string text && text.Length > 0)
+            _vm.ReplaySpeech(text);
+    }
+
+    // -------------------------------------------------------------------------
     // Settings — opens dialog, hands result back to VM
 
     private void SettingsButton_Click(object sender, RoutedEventArgs e)
@@ -83,5 +92,7 @@ public partial class MainWindow : Window
         var dlg        = new SettingsWindow(settingsVm) { Owner = this };
         if (dlg.ShowDialog() == true)
             _vm.ApplySettings(settingsVm);
+        else
+            _vm.CancelSettings(settingsVm.OriginalVoicePath);
     }
 }
