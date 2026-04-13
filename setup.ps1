@@ -26,7 +26,11 @@ $PiperVoices = @(
 
     # --- Female (GB) ---
     "en_GB-cori-high",          # Best quality British female
-    "en_GB-jenny_dioco-medium"  # Natural, conversational British female
+    "en_GB-jenny_dioco-medium", # Natural, conversational British female
+
+    # --- Spanish (Latin / Mexico) ---
+    "es_MX-ald-medium",         # Male
+    "es_MX-claude-high"         # Female
 )
 
 $ErrorActionPreference = "Stop"
