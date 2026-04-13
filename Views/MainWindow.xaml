@@ -34,6 +34,15 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Grid Margin="4,3">
+                                <Grid.Style>
+                                    <Style TargetType="Grid">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsHistorical}" Value="True">
+                                                <Setter Property="Opacity" Value="0.38"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Grid.Style>
 
                                 <!-- System note — centred dim italic, no bubble -->
                                 <TextBlock Text="{Binding Text}"

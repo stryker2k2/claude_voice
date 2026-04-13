@@ -114,12 +114,13 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
                     {
                         Role        = entry.Role,
                         DisplayName = entry.Role == "user" ? "You" : _config.AssistantName,
-                        Text        = entry.Content
+                        Text        = entry.Content,
+                        IsHistorical = true
                     });
             }
         }
 
-        try { _stt = new SttService(ResolveModelPath(_config.WhisperModel)); }
+        try { _stt = new SttService(ResolveModelPath(AppConfig.WhisperPathFromKey(_config.WhisperModelKey))); }
         catch (FileNotFoundException ex) { _initWarning = ex.Message; }
 
         if (_stt is not null)
@@ -495,6 +496,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             _config.AnthropicApiKey, _claude.SystemPrompt, voices, currentModel,
             _config.PttKey ?? "F5", _config.WakeWord, _config.AssistantName,
             _config.EnableMemory, _config.EnableWebSearch, _config.SilenceTimeout, _config.VoiceThresholdDb, _config.WakeSound,
+            _config.WhisperModelKey,
             wipeMemoryAction: () =>
             {
                 _memory.Wipe();
@@ -532,23 +534,39 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         var wakeWordChanged = !string.Equals(vm.WakeWord, _config.WakeWord,
             StringComparison.OrdinalIgnoreCase);
 
+        var newWhisperKey = vm.SelectedWhisperModel?.Key ?? _config.WhisperModelKey;
+        if (newWhisperKey != _config.WhisperModelKey && _stt is not null)
+        {
+            try
+            {
+                var newWhisperPath = ResolveModelPath(AppConfig.WhisperPathFromKey(newWhisperKey));
+                _stt.ChangeModel(newWhisperPath);
+            }
+            catch (Exception ex)
+            {
+                SetStatus($"Could not load Whisper model '{newWhisperKey}': {ex.Message}", StatusKind.Error);
+                newWhisperKey = _config.WhisperModelKey; // revert key if swap failed
+            }
+        }
+
         _config = new AppConfig
         {
-            AnthropicApiKey = string.IsNullOrWhiteSpace(vm.ApiKey) ? _config.AnthropicApiKey : vm.ApiKey,
-            WhisperModel    = _config.WhisperModel,
-            PiperExe        = _config.PiperExe,
-            PiperModel      = ToRelativePath(newModel),
-            TtsRate         = _config.TtsRate,
-            TtsVolume       = _config.TtsVolume,
-            PttKey          = vm.PttKey,
-            WakeWord        = vm.WakeWord,
-            SystemPrompt    = vm.SystemPrompt,
-            AssistantName   = vm.AssistantName,
-            EnableMemory    = vm.EnableMemory,
-            EnableWebSearch = vm.EnableWebSearch,
-            SilenceTimeout    = vm.SilenceTimeout,
-            VoiceThresholdDb  = vm.VoiceThresholdDb,
-            WakeSound         = vm.WakeSound,
+            AnthropicApiKey  = string.IsNullOrWhiteSpace(vm.ApiKey) ? _config.AnthropicApiKey : vm.ApiKey,
+            WhisperModel     = _config.WhisperModel,
+            WhisperModelKey  = newWhisperKey,
+            PiperExe         = _config.PiperExe,
+            PiperModel       = ToRelativePath(newModel),
+            TtsRate          = _config.TtsRate,
+            TtsVolume        = _config.TtsVolume,
+            PttKey           = vm.PttKey,
+            WakeWord         = vm.WakeWord,
+            SystemPrompt     = vm.SystemPrompt,
+            AssistantName    = vm.AssistantName,
+            EnableMemory     = vm.EnableMemory,
+            EnableWebSearch  = vm.EnableWebSearch,
+            SilenceTimeout   = vm.SilenceTimeout,
+            VoiceThresholdDb = vm.VoiceThresholdDb,
+            WakeSound        = vm.WakeSound,
         };
         try
         {

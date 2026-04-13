@@ -7,7 +7,8 @@ namespace claude_voice;
 
 public sealed class SttService : IDisposable
 {
-    private readonly WhisperFactory _factory;
+    private WhisperFactory _factory;
+    private bool           _isEnglishOnly;
     private WaveInEvent?   _waveIn;
     private WaveFileWriter? _waveWriter;
     private string          _tempFile = "";
@@ -23,10 +24,31 @@ public sealed class SttService : IDisposable
     {
         if (!File.Exists(modelPath))
             throw new FileNotFoundException(
-                $"Whisper model not found at: {modelPath}\nRun download-whisper.ps1 to download it.");
+                $"Whisper model not found at: {modelPath}\nRun setup.ps1 to download it.");
 
-        _factory = WhisperFactory.FromPath(modelPath);
+        _factory       = WhisperFactory.FromPath(modelPath);
+        _isEnglishOnly = IsEnglishOnlyModel(modelPath);
     }
+
+    /// <summary>
+    /// Swaps the Whisper model at runtime. Safe to call between recordings;
+    /// throws if a recording is currently in progress.
+    /// </summary>
+    public void ChangeModel(string newModelPath)
+    {
+        if (IsRecording)
+            throw new InvalidOperationException("Cannot change Whisper model while recording.");
+        if (!File.Exists(newModelPath))
+            throw new FileNotFoundException($"Whisper model not found: {newModelPath}");
+
+        var old    = _factory;
+        _factory       = WhisperFactory.FromPath(newModelPath);
+        _isEnglishOnly = IsEnglishOnlyModel(newModelPath);
+        old.Dispose();
+    }
+
+    private static bool IsEnglishOnlyModel(string path) =>
+        Path.GetFileName(path).Contains(".en.", StringComparison.OrdinalIgnoreCase);
 
     public void StartRecording()
     {
@@ -78,9 +100,10 @@ public sealed class SttService : IDisposable
             const long MinAudioBytes = 44 + 16_000;
             if (new FileInfo(_tempFile).Length < MinAudioBytes) return "";
 
-            using var processor = _factory.CreateBuilder()
-                .WithLanguage("en")
-                .Build();
+            // English-only models need the language hint; multilingual models auto-detect.
+            var builder = _factory.CreateBuilder();
+            if (_isEnglishOnly) builder = builder.WithLanguage("en");
+            using var processor = builder.Build();
 
             await using var stream = File.OpenRead(_tempFile);
             var sb = new StringBuilder();

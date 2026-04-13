@@ -93,6 +93,76 @@
     </Style>
 
     <!-- =====================================================================
+         TabControl — dark shell
+         ===================================================================== -->
+    <Style TargetType="TabControl">
+        <Setter Property="Background"      Value="#1E1E1E"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding"         Value="0"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabControl">
+                    <Grid SnapsToDevicePixels="True">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <!-- Tab header strip -->
+                        <Border Grid.Row="0"
+                                BorderBrush="#3C3C3C" BorderThickness="0,0,0,1"
+                                Background="Transparent">
+                            <TabPanel IsItemsHost="True" Background="Transparent"/>
+                        </Border>
+                        <!-- Tab content -->
+                        <ContentPresenter Grid.Row="1"
+                                          ContentSource="SelectedContent"/>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- =====================================================================
+         TabItem — VS Code-style top-border indicator
+         ===================================================================== -->
+    <Style TargetType="TabItem">
+        <Setter Property="Background"   Value="Transparent"/>
+        <Setter Property="Foreground"   Value="#999999"/>
+        <Setter Property="BorderBrush"  Value="Transparent"/>
+        <Setter Property="Padding"      Value="16,8"/>
+        <Setter Property="FontFamily"   Value="Segoe UI"/>
+        <Setter Property="FontSize"     Value="13"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TabItem">
+                    <Border x:Name="root"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="0,2,0,0"
+                            Margin="0,0,2,0"
+                            SnapsToDevicePixels="True">
+                        <ContentPresenter ContentSource="Header"
+                                          Margin="{TemplateBinding Padding}"
+                                          TextElement.Foreground="{TemplateBinding Foreground}"
+                                          SnapsToDevicePixels="True"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="root" Property="Background" Value="#2D2D30"/>
+                            <Setter Property="Foreground" Value="#D4D4D4"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="root" Property="BorderBrush" Value="#0E639C"/>
+                            <Setter Property="Foreground"  Value="#9CDCFE"/>
+                            <Setter Property="FontWeight"  Value="SemiBold"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- =====================================================================
          ComboBox — ToggleButton (the closed face)
          ===================================================================== -->
     <Style x:Key="DarkComboBoxToggleButton" TargetType="{x:Type ToggleButton}">

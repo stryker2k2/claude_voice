@@ -3,13 +3,8 @@
 .SYNOPSIS
     One-shot setup for new developers: downloads Piper + Whisper, then installs
     Claude Voice to %LOCALAPPDATA%\ClaudeVoice\ with a Start Menu shortcut.
-.PARAMETER WhisperModel
-    Whisper model to download (default: base.en, ~142 MB).
-    Options: tiny.en (~75 MB), base.en (~142 MB), small.en (~466 MB)
 #>
-param(
-    [string]$WhisperModel = "base.en"
-)
+param()
 
 # Voices to download. All will appear in the Settings > Voice dropdown.
 # Full list: https://rhasspy.github.io/piper-samples/
@@ -134,24 +129,32 @@ Write-Host "    Voice models ready." -ForegroundColor Green
 Write-Host ""
 Write-Host "=== Step 3: Whisper (PTT) ===" -ForegroundColor Yellow
 
-$whisperDir  = Join-Path $PSScriptRoot "whisper"
-$whisperFile = Join-Path $whisperDir "ggml-$WhisperModel.bin"
-$whisperUrl  = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-$WhisperModel.bin"
+# Both models are downloaded so the user can switch between them in Settings.
+# base.en  = English-only, slightly more accurate for English (~142 MB)
+# base     = Multilingual, supports Spanish and 98 other languages (~142 MB)
+$WhisperModels = @("base.en", "base")
 
-if (Test-Path $whisperFile) {
-    Write-Host "==> Whisper model already exists, skipping." -ForegroundColor Green
-} else {
-    New-Item -ItemType Directory -Force -Path $whisperDir | Out-Null
-    Write-Host "==> Downloading $WhisperModel model..." -ForegroundColor Cyan
-    $ProgressPreference = 'SilentlyContinue'
-    try {
-        Invoke-WebRequest -Uri $whisperUrl -OutFile $whisperFile -UseBasicParsing
-        $sizeMb = [math]::Round((Get-Item $whisperFile).Length / 1MB, 1)
-        Write-Host "    Done. ($sizeMb MB)" -ForegroundColor Green
-    } catch {
-        if (Test-Path $whisperFile) { Remove-Item $whisperFile }
-        Write-Error "Whisper download failed: $_"
-        exit 1
+$whisperDir = Join-Path $PSScriptRoot "whisper"
+New-Item -ItemType Directory -Force -Path $whisperDir | Out-Null
+$ProgressPreference = 'SilentlyContinue'
+
+foreach ($model in $WhisperModels) {
+    $whisperFile = Join-Path $whisperDir "ggml-$model.bin"
+    $whisperUrl  = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-$model.bin"
+
+    if (Test-Path $whisperFile) {
+        Write-Host "==> Whisper $model model already exists, skipping." -ForegroundColor Green
+    } else {
+        Write-Host "==> Downloading $model model..." -ForegroundColor Cyan
+        try {
+            Invoke-WebRequest -Uri $whisperUrl -OutFile $whisperFile -UseBasicParsing
+            $sizeMb = [math]::Round((Get-Item $whisperFile).Length / 1MB, 1)
+            Write-Host "    Done. ($sizeMb MB)" -ForegroundColor Green
+        } catch {
+            if (Test-Path $whisperFile) { Remove-Item $whisperFile }
+            Write-Error "Whisper download failed for $model`: $_"
+            exit 1
+        }
     }
 }
 

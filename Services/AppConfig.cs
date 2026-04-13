@@ -9,6 +9,13 @@ public sealed class AppConfig
     public string AnthropicApiKey { get; init; } = "";
     public string WhisperModel    { get; init; } = "whisper\\ggml-base.en.bin";
 
+    // "base.en" = English-only model, "base" = multilingual model
+    public string WhisperModelKey { get; init; } = "base.en";
+
+    /// <summary>Derives the relative whisper model path from a model key (e.g. "base.en" → "whisper\ggml-base.en.bin").</summary>
+    public static string WhisperPathFromKey(string key) =>
+        Path.Combine("whisper", $"ggml-{key}.bin");
+
     // TTS settings (mirrors claude_tts config.json)
     public string? PiperExe   { get; init; }
     public string? PiperModel { get; init; }
